@@ -2,11 +2,12 @@
 #include <windows.h>          // 명시적으로 가장 먼저
 #define NOMINMAX              // windows.h의 min/max 매크로가 std::min/max와 충돌하는 것 방지
 #include "InspectionAlgorithm.h"
-#include "Fchain.h"      // CChain 클래스 (doc5와 동일 헤더)
+#include "Fchain.h"      // CChain 클래스
 #include <vector>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <memory>  
 
 // ================= 다크 불량 판정 임계값 (D-Value) =================
 static constexpr double D_FORM_MIN_AREA_RATIO = 0.25;  // B-면적비율 > [D] 형태 판단 최소면
@@ -176,7 +177,7 @@ extern "C" INSPECT_API int InspectImage(
     if (!bgr32 || !results || width <= 0 || height <= 0 || maxResults <= 0) return 0;
 
     // ---- BGR32 -> Gray 변환 ----
-    unsigned char* pGray = new unsigned char[width * height];
+    std::unique_ptr<unsigned char[]> pGray(new unsigned char[width * height]);
     for (int y = 0; y < height; ++y)
     {
         const unsigned char* row = bgr32 + y * stride;
@@ -197,8 +198,8 @@ extern "C" INSPECT_API int InspectImage(
     double whiteCut = std::min<double>(255.0, meanGlobal + static_cast<double>(threshold));
 
     // ---- 다크/화이트 이진화 ----
-    unsigned char* pBinDark = new unsigned char[width * height];
-    unsigned char* pBinWhite = new unsigned char[width * height];
+    std::unique_ptr<unsigned char[]> pBinDark(new unsigned char[width * height]);
+    std::unique_ptr<unsigned char[]> pBinWhite(new unsigned char[width * height]);
     for (int i = 0; i < width * height; ++i)
     {
         pBinDark[i] = (pGray[i] < darkCut) ? 255 : 0;
@@ -206,29 +207,29 @@ extern "C" INSPECT_API int InspectImage(
     }
 
     // ---- CChain 으로 blob 추출 (다크) ----
-    CChain* pChain_B = new CChain(AREA_MIN, 100000);
-    pChain_B->SetChainData(1, pBinDark, 1, 1, 2, 100000, width, height);
+    std::unique_ptr<CChain> pChain_B(new CChain(AREA_MIN, 100000));
+    pChain_B->SetChainData(1, pBinDark.get(), 1, 1, 2, 100000, width, height);
     int nBlobCnt_B = pChain_B->FastChain(1, 1, width - 1, height - 1);
 
     // ---- CChain 으로 blob 추출 (화이트) ----
-    CChain* pChain_W = new CChain(AREA_MIN, 100000);
-    pChain_W->SetChainData(1, pBinWhite, 1, 1, 2, 100000, width, height);
+    std::unique_ptr<CChain> pChain_W(new CChain(AREA_MIN, 100000));
+    pChain_W->SetChainData(1, pBinWhite.get(), 1, 1, 2, 100000, width, height);
     int nBlobCnt_W = pChain_W->FastChain(1, 1, width - 1, height - 1);
 
     // ---- 핀홀류 모폴로지(팽창) blob (dRatio_mopol 산출용, doc5와 동일 절차) ----
-    unsigned char* pOriBinary = new unsigned char[width * height];
-    unsigned char* pMopol = new unsigned char[width * height];
-    memcpy(pOriBinary, pBinWhite, sizeof(unsigned char) * width * height);
-    memcpy(pMopol, pBinWhite, sizeof(unsigned char) * width * height);
+    std::unique_ptr<unsigned char[]> pOriBinary(new unsigned char[width * height]);
+    std::unique_ptr<unsigned char[]> pMopol(new unsigned char[width * height]);
+    memcpy(pOriBinary.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
+    memcpy(pMopol.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
 
     // Dilate_BinaryMini 는 기존 doc5와 동일한 팽창 함수 사용 (프로젝트 공용 유틸)
     //for (int i = 0; i < NDIL_CNT; ++i)
     //{
-    //    Dilate_BinaryMini(pOriBinary, pMopol, width, height, width);
+    //    Dilate_BinaryMini(pOriBinary.get(), pMopol.get(), width, height, width);
     //}
 
-    CChain* pChain_mopol = new CChain(40, 100000);
-    pChain_mopol->SetChainData(1, pMopol, 1, 1, 2, 100000, width, height);
+    std::unique_ptr<CChain> pChain_mopol(new CChain(40, 100000));
+    pChain_mopol->SetChainData(1, pMopol.get(), 1, 1, 2, 100000, width, height);
     int nBlobCnt_mopol = pChain_mopol->FastChain(1, 1, width - 1, height - 1);
 
     std::vector<BlobFeature> feats;
@@ -368,15 +369,6 @@ extern "C" INSPECT_API int InspectImage(
         results[i].isDark = f.isDark ? 1 : 0;
         results[i].isLinear = bIsLinear ? 1 : 0;
     }
-
-    delete pChain_B;
-    delete pChain_W;
-    delete pChain_mopol;
-    delete[] pOriBinary;
-    delete[] pMopol;
-    delete[] pBinDark;
-    delete[] pBinWhite;
-    delete[] pGray;
 
     return count;
 }
