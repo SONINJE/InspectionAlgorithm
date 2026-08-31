@@ -73,9 +73,11 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Fchain.h" />
     <ClInclude Include="InspectionAlgorithm.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Fchain.cpp" />
     <ClCompile Include="InspectionAlgorithm.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
