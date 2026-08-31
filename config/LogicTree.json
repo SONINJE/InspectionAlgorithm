@@ -1,0 +1,201 @@
+{
+  "root": 0,
+  "nodes": [
+    {
+      "id": 0,
+      "name": "IsDark",
+      "type": "Condition",
+      "feature": "IsDark",
+      "operator": "==",
+      "value": true,
+      "true": 1,
+      "false": 10
+    },
+    {
+      "id": 1,
+      "name": "IsLinear_Dark",
+      "type": "Condition",
+      "feature": "IsLinear",
+      "operator": "==",
+      "value": true,
+      "true": 2,
+      "false": 3
+    },
+    {
+      "id": 2,
+      "name": "DarkPeak > LINEAR_THRESHOLD",
+      "type": "Condition",
+      "feature": "DarkPeak",
+      "operator": ">",
+      "value": "LINE_BRIGHTNESS_THRESHOLD",
+      "true": 4,
+      "false": 5
+    },
+    {
+      "id": 4,
+      "name": "IsAngleNearVerticalOrHorizontal",
+      "type": "Condition",
+      "feature": "IsAngleNearVH",
+      "operator": "==",
+      "value": true,
+      "true": 6,
+      "false": 7
+    },
+    {
+      "id": 6,
+      "name": "Scratch",
+      "type": "Result",
+      "result": "SCRATCH"
+    },
+    {
+      "id": 7,
+      "name": "Crack",
+      "type": "Result",
+      "result": "CRACK"
+    },
+    {
+      "id": 5,
+      "name": "BlackWeak",
+      "type": "Result",
+      "result": "BLACK_WEAK"
+    },
+    {
+      "id": 3,
+      "name": "AreaRatio > AREA_RATIO_MIN",
+      "type": "Condition",
+      "feature": "AreaRatio",
+      "operator": ">",
+      "value": "AREA_RATIO_MIN",
+      "true": 8,
+      "false": 9
+    },
+    {
+      "id": 8,
+      "name": "DefectCoreIntensity < CRATER_THRESHOLD",
+      "type": "Condition",
+      "feature": "DefectCoreIntensity",
+      "operator": "<",
+      "value": "CRATER_CENTROID_INTENSITY",
+      "true": 11,
+      "false": 7
+    },
+    {
+      "id": 11,
+      "name": "AreaPercent > DARK_AREA_PERCENT_MIN",
+      "type": "Condition",
+      "feature": "AreaPercent",
+      "operator": ">",
+      "value": "DARK_AREA_PERCENT_MIN",
+      "true": 12,
+      "false": 7
+    },
+    {
+      "id": 12,
+      "name": "Crater",
+      "type": "Result",
+      "result": "CRATER"
+    },
+    {
+      "id": 9,
+      "name": "DarkWeak",
+      "type": "Result",
+      "result": "SURFACE_TYPE_WEAK_POINT_D"
+    },
+    {
+      "id": 10,
+      "name": "IsWhite",
+      "type": "Condition",
+      "feature": "IsWhite",
+      "operator": "==",
+      "value": true,
+      "true": 13,
+      "false": 99
+    },
+    {
+      "id": 13,
+      "name": "IsLinear_White",
+      "type": "Condition",
+      "feature": "IsLinear",
+      "operator": "==",
+      "value": true,
+      "true": 14,
+      "false": 15
+    },
+    {
+      "id": 14,
+      "name": "LineValue < WHITE_PEAK_THRESHOLD",
+      "type": "Condition",
+      "feature": "LineValue",
+      "operator": "<",
+      "value": "WHITE_PEAK_THRESHOLD",
+      "true": 16,
+      "false": 21
+    },
+    {
+      "id": 16,
+      "name": "Line",
+      "type": "Result",
+      "result": "LINE"
+    },
+    {
+      "id": 21,
+      "name": "MicroScratch",
+      "type": "Result",
+      "result": "MICRO_SCRATCH"
+    },
+    {
+      "id": 15,
+      "name": "WVal1 > WHITE_PEAK_THRESHOLD",
+      "type": "Condition",
+      "feature": "WVal1",
+      "operator": ">",
+      "value": "WHITE_PEAK_THRESHOLD",
+      "true": 17,
+      "false": 18
+    },
+    {
+      "id": 17,
+      "name": "Pinhole",
+      "type": "Result",
+      "result": "PINHOLE"
+    },
+    {
+      "id": 18,
+      "name": "WVal2 > WHITE_PEAK_THRESHOLD_2",
+      "type": "Condition",
+      "feature": "WVal2",
+      "operator": ">",
+      "value": "WHITE_PEAK_THRESHOLD_2",
+      "true": 19,
+      "false": 20
+    },
+    {
+      "id": 19,
+      "name": "dRatio_mopol > WHITE_RATIO_THRESHOLD",
+      "type": "Condition",
+      "feature": "dRatio_mopol",
+      "operator": ">",
+      "value": "WHITE_RATIO_THRESHOLD",
+      "true": 21,
+      "false": 22
+    },
+    {
+      "id": 22,
+      "name": "Dent",
+      "type": "Result",
+      "result": "DENT"
+    },
+    {
+      "id": 20,
+      "name": "WhiteWeak",
+      "type": "Result",
+      "result": "WHITE_WEAK"
+    },
+    {
+      "id": 99,
+      "name": "Unknown",
+      "type": "Result",
+      "result": "UNKNOWN"
+    }
+  ]
+}

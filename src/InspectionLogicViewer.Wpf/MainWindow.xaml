@@ -1,0 +1,117 @@
+<Window x:Class="InspectionLogicViewer.Wpf.MainWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Inspection Logic Viewer" Width="1400" Height="850">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="180"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Content="이미지 열기" Width="100" Margin="0,0,8,0" Click="OpenImage_Click"/>
+            <Button Content="검사" Width="80" Margin="0,0,8,0" Click="Inspect_Click"/>
+            <Button Content="이전" Width="70" Margin="0,0,8,0" Click="Previous_Click"/>
+            <Button Content="다음" Width="70" Margin="0,0,20,0" Click="Next_Click"/>
+            <TextBlock Text="Threshold" VerticalAlignment="Center"/>
+            <TextBox x:Name="ThresholdBox" Text="35" Width="60" Margin="6,0,15,0"/>
+            <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="이미지를 열어주세요."/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="1.1*"/>
+                <ColumnDefinition Width="1.2*"/>
+            </Grid.ColumnDefinitions>
+
+    <!-- LEFT: 큰 그래프(Canvas) -->
+    <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0">
+      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <Canvas x:Name="LogicCanvas" Width="960" Height="600" Background="WhiteSmoke"/>
+                </ScrollViewer>
+            </Border>
+
+            <!-- CENTER: 불량 목록 -->
+            <Border Grid.Column="1" BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="불량 목록" FontSize="18" FontWeight="Bold" Margin="10"/>
+                    <ListBox x:Name="DefectList" SelectionChanged="DefectList_SelectionChanged" Margin="6" FontSize="14" Padding="4"/>
+                </DockPanel>
+            </Border>
+
+            <!-- RIGHT: LogicTree 위쪽, 검사 이미지(원래 그래프 자리) 하단 -->
+            <Border Grid.Column="2" BorderBrush="Gray" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="1.1*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0">
+                        <TextBlock DockPanel.Dock="Top" Text="Logic Tree" FontSize="18" FontWeight="Bold" Margin="10"/>
+                        <ScrollViewer>
+                            <TreeView x:Name="LogicTreeView" Margin="6"/>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <Grid Grid.Row="1" Margin="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="검사 이미지" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <Viewbox Stretch="Uniform">
+                            <Image x:Name="ImageView" Stretch="Uniform" MaxWidth="320" MaxHeight="240"/>
+                        </Viewbox>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Header="Feature" Margin="0,0,8,0">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="100"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="X"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="Fx" FontSize="13"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Y"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" x:Name="Fy" FontSize="13"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Width"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="Fw" FontSize="13"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Height"/>
+                    <TextBlock Grid.Row="1" Grid.Column="3" x:Name="Fh" FontSize="13"/>
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Area"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="Farea" FontSize="13"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="Mean"/>
+                    <TextBlock Grid.Row="2" Grid.Column="3" x:Name="Fmean" FontSize="13"/>
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Aspect"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="Faspect" FontSize="13"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="Type"/>
+                    <TextBlock Grid.Row="3" Grid.Column="3" x:Name="Ftype" FontSize="13"/>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Grid.Column="1" Header="Logic Path">
+                <ListBox x:Name="PathList" Margin="8" FontSize="13"/>
+            </GroupBox>
+        </Grid>
+    </Grid>
+</Window>
