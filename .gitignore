@@ -1,0 +1,61 @@
+# Visual Studio / local IDE state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+*.ncb
+*.opendb
+
+# .NET / WPF build output
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Native build output and intermediates
+x64/
+x86/
+Win32/
+ARM64/
+Debug/
+Release/
+**/x64/
+**/x86/
+**/Win32/
+**/ARM64/
+**/Debug/
+**/Release/
+*.aps
+*.idb
+*.ilk
+*.iobj
+*.ipch
+*.ipdb
+*.lastbuildstate
+*.log
+*.obj
+*.pch
+*.pdb
+*.recipe
+*.tlog
+
+# OpenCV binaries under third_party/opencv are tracked through Git LFS.
+!third_party/
+!third_party/opencv/
+!third_party/opencv/x64/
+!third_party/opencv/x64/**
+
+# Local sample data. Keep these outside git unless you intentionally add a tiny public sample set.
+image/
+_preview/
+
+# OS / temporary files
+Thumbs.db
+Desktop.ini
+*.tmp
+*.cache
