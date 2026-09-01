@@ -28,7 +28,8 @@
 
     <!-- LEFT: 큰 그래프(Canvas) -->
     <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0">
-      <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+      <ScrollViewer x:Name="LogicScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                    PreviewMouseWheel="LogicScroll_PreviewMouseWheel">
                     <Canvas x:Name="LogicCanvas" Width="960" Height="600" Background="WhiteSmoke"/>
                 </ScrollViewer>
             </Border>
@@ -36,12 +37,12 @@
             <!-- CENTER: 불량 목록 -->
             <Border Grid.Column="1" BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="불량 목록" FontSize="18" FontWeight="Bold" Margin="10"/>
+                    <TextBlock DockPanel.Dock="Top" Text="Defect List" FontSize="18" FontWeight="Bold" Margin="10"/>
                     <ListBox x:Name="DefectList" SelectionChanged="DefectList_SelectionChanged" Margin="6" FontSize="14" Padding="4"/>
                 </DockPanel>
             </Border>
 
-            <!-- RIGHT: LogicTree 위쪽, 검사 이미지(원래 그래프 자리) 하단 -->
+            <!-- RIGHT: LogicTree 위쪽, 검사 이미지 하단 -->
             <Border Grid.Column="2" BorderBrush="Gray" BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -56,14 +57,22 @@
                         </ScrollViewer>
                     </DockPanel>
 
-                    <Grid Grid.Row="1" Margin="8">
+                    <!-- 이미지 패널: Image가 부모 그리드 크기에 맞춰 축소/확대되도록 변경 -->
+                    <Grid Grid.Row="1" Margin="8" x:Name="ImagePanel">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <TextBlock Text="검사 이미지" FontWeight="Bold" Margin="0,0,0,6"/>
-                        <Viewbox Stretch="Uniform">
-                            <Image x:Name="ImageView" Stretch="Uniform" MaxWidth="320" MaxHeight="240"/>
-                        </Viewbox>
+                        <!-- Image를 Viewbox 대신 직접 사용. 부모 크기에 바인딩하여 작아질 때도 잘 맞음 -->
+                        <Border Grid.Row="1" Background="Transparent" ClipToBounds="True">
+                            <Image x:Name="ImageView"
+                                   Stretch="Uniform"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   MaxWidth="{Binding ActualWidth, ElementName=ImagePanel}"
+                                   MaxHeight="{Binding ActualHeight, ElementName=ImagePanel}"/>
+                        </Border>
                     </Grid>
                 </Grid>
             </Border>

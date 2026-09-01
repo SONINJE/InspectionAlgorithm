@@ -8,6 +8,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Collections.Generic;
 using System;
+using System.Windows.Input; // 추가
 
 namespace InspectionLogicViewer.Wpf;
 
@@ -16,7 +17,39 @@ public partial class MainWindow : Window
     private BitmapSource? _source;
     private readonly List<DefectResult> _results = new();
 
-    public MainWindow() => InitializeComponent();
+    // Zoom 관련 필드
+    private readonly ScaleTransform _logicScale = new(1.0, 1.0);
+    private readonly TranslateTransform _logicTranslate = new(0.0, 0.0);
+    private const double ZoomFactor = 1.1;
+    private const double MinZoom = 0.2;
+    private const double MaxZoom = 4.0;
+
+    // Pan(잡고 끌기) 관련 필드
+    private bool _isPanning = false;
+    private Point _panStart; // 윈도우 좌표계 시작점
+    private double _panOriginX, _panOriginY; // 시작 시의 translate 값
+
+    public MainWindow()
+    {
+        InitializeComponent();
+
+        // LogicCanvas에 Transform 설정 (Scale -> Translate)
+        var tg = new TransformGroup();
+        tg.Children.Add(_logicScale);
+        tg.Children.Add(_logicTranslate);
+        LogicCanvas.RenderTransform = tg;
+        LogicCanvas.RenderTransformOrigin = new Point(0, 0);
+
+        // 마우스 이벤트 연결 (패닝)
+        LogicCanvas.MouseLeftButtonDown += LogicCanvas_MouseLeftButtonDown;
+        LogicCanvas.MouseMove += LogicCanvas_MouseMove;
+        LogicCanvas.MouseLeftButtonUp += LogicCanvas_MouseLeftButtonUp;
+        LogicCanvas.MouseLeave += LogicCanvas_MouseLeave;
+
+        // ScrollViewer의 PreviewMouseWheel 이벤트는 XAML에서 연결됨 (LogicScroll_PreviewMouseWheel)
+        // 만약 ScrollViewer가 LogicCanvas의 마우스 이벤트를 가로채면 Preview 이벤트로 처리하기 위해
+        // LogicScroll.PreviewMouseLeftButtonDown += (s,e)=> { /* 필요시 처리 */ };
+    }
 
     private void OpenImage_Click(object sender, RoutedEventArgs e)
     {
@@ -29,6 +62,84 @@ public partial class MainWindow : Window
         ImageView.Source = _source;
         _results.Clear(); DefectList.Items.Clear(); LogicTreeView.Items.Clear(); PathList.Items.Clear();
         StatusText.Text = $"{System.IO.Path.GetFileName(d.FileName)}  {_source.PixelWidth} x {_source.PixelHeight}";
+    }
+
+    // ScrollViewer의 PreviewMouseWheel 이벤트: 마우스 위치 기준으로 줌 처리
+    private void LogicScroll_PreviewMouseWheel(object? sender, MouseWheelEventArgs e)
+    {
+        // Ctrl 키 눌렀을 때만 줌하도록 변경하려면 아래 주석을 사용하세요.
+        // if (!Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl)) return;
+
+        double oldScale = _logicScale.ScaleX;
+        double zoom = Math.Pow(ZoomFactor, e.Delta / 120.0); // Delta는 보통 120 단위
+        double newScale = Math.Clamp(oldScale * zoom, MinZoom, MaxZoom);
+        double scaleRatio = newScale / oldScale;
+        if (Math.Abs(newScale - oldScale) < 1e-6) { e.Handled = true; return; }
+
+        // 마우스 위치(LogicCanvas 좌표계)
+        Point mousePos = e.GetPosition(LogicCanvas);
+
+        // Translate 보정: 마우스 위치 고정 (스크린상에서 마우스 밑에 있던 점이 유지되도록)
+        // Translate은 Scale 이후 적용되므로 보정 방식은 기존 방식 유지
+        _logicTranslate.X = mousePos.X - (mousePos.X - _logicTranslate.X) * scaleRatio;
+        _logicTranslate.Y = mousePos.Y - (mousePos.Y - _logicTranslate.Y) * scaleRatio;
+
+        _logicScale.ScaleX = newScale;
+        _logicScale.ScaleY = newScale;
+
+        e.Handled = true; // ScrollViewer가 스크롤하지 않도록 처리
+    }
+
+    // 패닝 시작 (좌클릭)
+    private void LogicCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // 마우스 캡처 및 상태 저장
+        _isPanning = true;
+        _panStart = e.GetPosition(this); // 윈도우 좌표계
+        _panOriginX = _logicTranslate.X;
+        _panOriginY = _logicTranslate.Y;
+        LogicCanvas.CaptureMouse();
+        LogicCanvas.Cursor = Cursors.SizeAll;
+        e.Handled = true; // ScrollViewer 등 상위 컨트롤로 이벤트 전달 방지
+    }
+
+    // 패닝 동작
+    private void LogicCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isPanning) return;
+
+        Point now = e.GetPosition(this); // 윈도우 좌표계
+        Vector delta = now - _panStart;
+
+        // 현재 스케일을 고려하여 translate 보정 (화면 이동량이 자연스럽도록)
+        double invScale = (_logicScale.ScaleX != 0.0) ? 1.0 / _logicScale.ScaleX : 1.0;
+        _logicTranslate.X = _panOriginX + delta.X * invScale;
+        _logicTranslate.Y = _panOriginY + delta.Y * invScale;
+
+        e.Handled = true;
+    }
+
+    // 패닝 종료 (마우스 버튼 업)
+    private void LogicCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_isPanning) return;
+        _isPanning = false;
+        LogicCanvas.ReleaseMouseCapture();
+        LogicCanvas.Cursor = Cursors.Arrow;
+        e.Handled = true;
+    }
+
+    // 캔버스에서 나가면 패닝 해제
+    private void LogicCanvas_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!_isPanning) return;
+        // 마우스가 캔버스 밖으로 나가도 버튼이 눌려있을 수 있으므로 캡처 상태 확인 후 해제
+        if (Mouse.LeftButton != MouseButtonState.Pressed)
+        {
+            _isPanning = false;
+            LogicCanvas.ReleaseMouseCapture();
+            LogicCanvas.Cursor = Cursors.Arrow;
+        }
     }
 
     private void Inspect_Click(object sender, RoutedEventArgs e)
