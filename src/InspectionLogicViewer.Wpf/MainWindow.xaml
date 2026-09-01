@@ -6,7 +6,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="180"/>
+            <RowDefinition Height="260"/> <!-- 높이 증가 -->
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
@@ -26,10 +26,10 @@
                 <ColumnDefinition Width="1.2*"/>
             </Grid.ColumnDefinitions>
 
-    <!-- LEFT: 큰 그래프(Canvas) -->
-    <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0">
-      <ScrollViewer x:Name="LogicScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
-                    PreviewMouseWheel="LogicScroll_PreviewMouseWheel">
+            <!-- LEFT: 큰 그래프(Canvas) -->
+            <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0">
+                <ScrollViewer x:Name="LogicScroll" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"
+                              PreviewMouseWheel="LogicScroll_PreviewMouseWheel">
                     <Canvas x:Name="LogicCanvas" Width="960" Height="600" Background="WhiteSmoke"/>
                 </ScrollViewer>
             </Border>
@@ -57,14 +57,13 @@
                         </ScrollViewer>
                     </DockPanel>
 
-                    <!-- 이미지 패널: Image가 부모 그리드 크기에 맞춰 축소/확대되도록 변경 -->
+                    <!-- 이미지 패널 -->
                     <Grid Grid.Row="1" Margin="8" x:Name="ImagePanel">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <TextBlock Text="검사 이미지" FontWeight="Bold" Margin="0,0,0,6"/>
-                        <!-- Image를 Viewbox 대신 직접 사용. 부모 크기에 바인딩하여 작아질 때도 잘 맞음 -->
                         <Border Grid.Row="1" Background="Transparent" ClipToBounds="True">
                             <Image x:Name="ImageView"
                                    Stretch="Uniform"
@@ -84,42 +83,163 @@
                 <ColumnDefinition Width="2*"/>
             </Grid.ColumnDefinitions>
 
+            <!-- Feature: 상세한 불량 정보 항목 추가 -->
             <GroupBox Header="Feature" Margin="0,0,8,0">
-                <Grid Margin="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="100"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                        <RowDefinition/>
-                    </Grid.RowDefinitions>
+                <ScrollViewer Margin="8" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="X"/>
-                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="Fx" FontSize="13"/>
-                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Y"/>
-                    <TextBlock Grid.Row="0" Grid.Column="3" x:Name="Fy" FontSize="13"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Width"/>
-                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="Fw" FontSize="13"/>
-                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Height"/>
-                    <TextBlock Grid.Row="1" Grid.Column="3" x:Name="Fh" FontSize="13"/>
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Area"/>
-                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="Farea" FontSize="13"/>
-                    <TextBlock Grid.Row="2" Grid.Column="2" Text="Mean"/>
-                    <TextBlock Grid.Row="2" Grid.Column="3" x:Name="Fmean" FontSize="13"/>
-                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Aspect"/>
-                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="Faspect" FontSize="13"/>
-                    <TextBlock Grid.Row="3" Grid.Column="2" Text="Type"/>
-                    <TextBlock Grid.Row="3" Grid.Column="3" x:Name="Ftype" FontSize="13"/>
-                </Grid>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="X" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="Fx" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Y" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="Fy" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Width" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="Fw" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Height" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="Fh" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Area" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="4" Grid.Column="1" x:Name="Farea" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Mean" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="5" Grid.Column="1" x:Name="Fmean" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Aspect" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="6" Grid.Column="1" x:Name="Faspect" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="7" Grid.Column="0" Text="Type (Name)" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="7" Grid.Column="1" x:Name="Ftype" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="8" Grid.Column="0" Text="Type (Code)" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="8" Grid.Column="1" x:Name="FDefectCode" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="9" Grid.Column="0" Text="IsDark" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="9" Grid.Column="1" x:Name="FIsDark" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="10" Grid.Column="0" Text="IsLinear" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="10" Grid.Column="1" x:Name="FIsLinear" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="11" Grid.Column="0" Text="AreaRatio" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="11" Grid.Column="1" x:Name="FareaRatio" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="12" Grid.Column="0" Text="Circularity" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="12" Grid.Column="1" x:Name="Fcircularity" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="13" Grid.Column="0" Text="Angle (deg)" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="13" Grid.Column="1" x:Name="FangleDeg" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="14" Grid.Column="0" Text="PeakMax" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="14" Grid.Column="1" x:Name="FpeakMax" FontSize="13" Margin="2"/>
+
+                        <TextBlock Grid.Row="15" Grid.Column="0" Text="AreaObjPercent" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="15" Grid.Column="1" x:Name="FareaObjPercent" FontSize="13" Margin="2"/>
+
+                        <!-- RatioMopol 표시는 필요하면 아래에 추가 -->
+                        <TextBlock Grid.Row="16" Grid.Column="0" Text="RatioMopol" Margin="2" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Row="16" Grid.Column="1" x:Name="FratioMopol" FontSize="13" Margin="2"/>
+                    </Grid>
+                </ScrollViewer>
             </GroupBox>
 
-            <GroupBox Grid.Column="1" Header="Logic Path">
-                <ListBox x:Name="PathList" Margin="8" FontSize="13"/>
+            <!-- Parameters 그룹은 그대로 유지 -->
+            <GroupBox Grid.Column="1" Header="Parameters">
+                <ScrollViewer Margin="8" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Orientation="Vertical" Margin="0,0,0,4">
+                        <TextBlock Text="파라미터" FontWeight="Bold" Margin="0,0,0,6"/>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="140"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Dark_면적비율" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" x:Name="Param_dark_Ratio" Text="0.25" Margin="2"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Dark_진원도" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" x:Name="Param_Roundness" Text="0.6" Margin="2"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Dark_면적비율" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="2" Grid.Column="1" x:Name="Param_DarkAreaPercent" Text="0.05" Margin="2"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Dark_최소밝기" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="3" Grid.Column="1" x:Name="Param_LinearBaseBright" Text="40.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Dark_기울기 하한" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="4" Grid.Column="1" x:Name="Param_LineAngleLow" Text="10.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Dark_기울기 상한" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="5" Grid.Column="1" x:Name="Param_LineAngleHigh" Text="90.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="White_핀홀 기준값(피크)" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="6" Grid.Column="1" x:Name="Param_WhitePeakIf" Text="60.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="7" Grid.Column="0" Text="White_돌출 기준값(피크)" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="7" Grid.Column="1" x:Name="Param_WhitePeakElseIf" Text="40.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="White_라인성 비율" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="8" Grid.Column="1" x:Name="Param_WhiteRatio" Text="1.5" Margin="2"/>
+
+                            <TextBlock Grid.Row="9" Grid.Column="0" Text="White_라인 기준값(피크)" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="9" Grid.Column="1" x:Name="Param_WhiteLinePeak" Text="50.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="10" Grid.Column="0" Text="선형성 비율" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="10" Grid.Column="1" x:Name="Param_LinearityRatio" Text="3.0" Margin="2"/>
+
+                            <TextBlock Grid.Row="11" Grid.Column="0" Text="최소 불량 크기" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="11" Grid.Column="1" x:Name="Param_AreaMin" Text="4" Margin="2"/>
+
+                            <TextBlock Grid.Row="12" Grid.Column="0" Text="모폴로지 연산횟수" VerticalAlignment="Center" Margin="2"/>
+                            <TextBox   Grid.Row="12" Grid.Column="1" x:Name="Param_NdilCnt" Text="2" Margin="2"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,6,0,0">
+                            <Button Content="Apply to native" Width="120" Click="ApplyParams_Click" Margin="0,0,8,0"/>
+                            <Button Content="Load from native" Width="120" Click="LoadParamsFromNative_Click" Margin="0,0,8,0"/>
+                            <Button Content="Reset defaults" Width="120" Click="ResetParams_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
             </GroupBox>
         </Grid>
     </Grid>

@@ -9,24 +9,39 @@
 #include <cstring>
 #include <memory>  
 
-// ================= 다크 불량 판정 임계값 (D-Value) =================
-static constexpr double D_FORM_MIN_AREA_RATIO = 0.25;  // B-면적비율 > [D] 형태 판단 최소면
-static constexpr double D_ROUNDNESS = 0.60;  // 불량 진원도 > [D] 진원도
-static constexpr double D_DARK_AREA_PERCENT = 0.05;  // 불량 면적% > [D] Dark면적%
-static constexpr double D_LINEAR_BASE_BRIGHT = 40.0;  // 다크 피크치 > [D] 선형 불량 기준밝기
-static constexpr double D_LINE_ANGLE_LOW = 10.0;  // 불량각도 < 10도
-static constexpr double D_LINE_ANGLE_HIGH = 90.0;  // 불량각도 > 90도
+// 기본값 (원래의 constexpr 값들)
+static constexpr double DEF_D_FORM_MIN_AREA_RATIO = 0.25;
+static constexpr double DEF_D_ROUNDNESS = 0.60;
+static constexpr double DEF_D_DARK_AREA_PERCENT = 0.05;
+static constexpr double DEF_D_LINEAR_BASE_BRIGHT = 40.0;
+static constexpr double DEF_D_LINE_ANGLE_LOW = 10.0;
+static constexpr double DEF_D_LINE_ANGLE_HIGH = 90.0;
 
-// ================= 백 불량 판정 임계값 (D-Value) =================
-static constexpr double D_WHITE_PEAK_IF = 60.0;  // W-Val1(핀홀) > 화이트 피크치 (IF)
-static constexpr double D_WHITE_PEAK_ELSEIF = 40.0;  // W-Val1(핀홀) > 화이트 피크치 (Else if)
-static constexpr double D_WHITE_RATIO = 1.50;  // dRatio_mopol > Ratio<White>
-static constexpr double D_WHITE_LINE_PEAK = 50.0;  // Value(라인) < 화이트 피크치
+static constexpr double DEF_D_WHITE_PEAK_IF = 60.0;
+static constexpr double DEF_D_WHITE_PEAK_ELSEIF = 40.0;
+static constexpr double DEF_D_WHITE_RATIO = 1.50;
+static constexpr double DEF_D_WHITE_LINE_PEAK = 50.0;
 
-// ================= 공통 =================
-static constexpr double D_LINEARITY_RATIO = 3.0;   // 라인성 판단 세로:가로 비율
-static constexpr int    AREA_MIN = 4;     // 최소 blob 면적
-static constexpr int    NDIL_CNT = 2;      // 팽창 반복 횟수
+static constexpr double DEF_D_LINEARITY_RATIO = 3.0;
+static constexpr int    DEF_AREA_MIN = 4;
+static constexpr int    DEF_NDIL_CNT = 2;
+
+// 런타임에서 변경 가능한 전역 변수
+static double g_D_FORM_MIN_AREA_RATIO = DEF_D_FORM_MIN_AREA_RATIO;
+static double g_D_ROUNDNESS = DEF_D_ROUNDNESS;
+static double g_D_DARK_AREA_PERCENT = DEF_D_DARK_AREA_PERCENT;
+static double g_D_LINEAR_BASE_BRIGHT = DEF_D_LINEAR_BASE_BRIGHT;
+static double g_D_LINE_ANGLE_LOW = DEF_D_LINE_ANGLE_LOW;
+static double g_D_LINE_ANGLE_HIGH = DEF_D_LINE_ANGLE_HIGH;
+
+static double g_D_WHITE_PEAK_IF = DEF_D_WHITE_PEAK_IF;
+static double g_D_WHITE_PEAK_ELSEIF = DEF_D_WHITE_PEAK_ELSEIF;
+static double g_D_WHITE_RATIO = DEF_D_WHITE_RATIO;
+static double g_D_WHITE_LINE_PEAK = DEF_D_WHITE_LINE_PEAK;
+
+static double g_D_LINEARITY_RATIO = DEF_D_LINEARITY_RATIO;
+static int    g_AREA_MIN = DEF_AREA_MIN;
+static int    g_NDIL_CNT = DEF_NDIL_CNT;
 
 enum DefectType
 {
@@ -64,33 +79,27 @@ struct BlobFeature
 // ============================================================
 static bool IsLinearBlob(const BlobFeature& f)
 {
-    return f.ratio > D_LINEARITY_RATIO;
+    return f.ratio > g_D_LINEARITY_RATIO;
 }
 
 static int Dilate_BinaryMini(LPBYTE fmSour, LPBYTE fmDest, int nWidth, int nHeight, int nPitch)
 {
-    // 확장 연산에 사용되는 3x3 커널 크기 및 중심 좌표 설정
     int nOrgX{}, nOrgY{};
     int nKernelSizeY{}, nKernelSizeX{};
     nKernelSizeY = nKernelSizeX = 3;
-    //바이너리 된 이미지를 탐색하며 3x3 커널내에 255 값이 하나라도 존재한다면 중앙값을 255로 치환한다.  
     int kernel[9]{};
     for (int i = 0; i < 9; i++) kernel[i] = 1;
 
-    //중심 좌표 Set
     nOrgX = static_cast<int>(nKernelSizeX / 2.0 - 0.5);
     nOrgY = static_cast<int>(nKernelSizeY / 2.0 - 0.5);
 
-    // 받아온 이미지의 픽셀을 팽창 연산 수행하여 출력 이미지에 저장
     for (int i = 0; i < nHeight - nKernelSizeY; i++) {
         for (int j = 0; j < nWidth - nKernelSizeX; j++) {
-            // 커널을 사용하여 팽창 연산 수행
             for (int k = 0; k < nKernelSizeY; k++) {
                 for (int l = 0; l < nKernelSizeX; l++) {
-                    // 이진화된 이미지에서 0(False)가 아닌 경우 255로 설정
                     if (*(fmSour + (i + k) * nWidth + j + l)) {
                         *(fmDest + (i + nOrgY) * nWidth + j + nOrgX) = 255;
-                        goto LOOP;  // 내부 루프를 빠져나가기 위한 goto
+                        goto LOOP;
                     }
                     *(fmDest + (i + nOrgY) * nWidth + j + nOrgX) = 0;
                 }
@@ -99,11 +108,54 @@ static int Dilate_BinaryMini(LPBYTE fmSour, LPBYTE fmDest, int nWidth, int nHeig
         }
     }
 
-    return 1;  // 확장 연산 완료
+    return 1;
 }
 
 // ============================================================
-// 로직트리 기반 최종 불량 타입 판정
+// 런타임 파라미터 설정/조회
+// ============================================================
+extern "C" INSPECT_API void SetInspectParams(const InspectParams* params)
+{
+    if (!params) return;
+    g_D_FORM_MIN_AREA_RATIO = params->D_FORM_MIN_AREA_RATIO;
+    g_D_ROUNDNESS = params->D_ROUNDNESS;
+    g_D_DARK_AREA_PERCENT = params->D_DARK_AREA_PERCENT;
+    g_D_LINEAR_BASE_BRIGHT = params->D_LINEAR_BASE_BRIGHT;
+    g_D_LINE_ANGLE_LOW = params->D_LINE_ANGLE_LOW;
+    g_D_LINE_ANGLE_HIGH = params->D_LINE_ANGLE_HIGH;
+
+    g_D_WHITE_PEAK_IF = params->D_WHITE_PEAK_IF;
+    g_D_WHITE_PEAK_ELSEIF = params->D_WHITE_PEAK_ELSEIF;
+    g_D_WHITE_RATIO = params->D_WHITE_RATIO;
+    g_D_WHITE_LINE_PEAK = params->D_WHITE_LINE_PEAK;
+
+    g_D_LINEARITY_RATIO = params->D_LINEARITY_RATIO;
+    g_AREA_MIN = params->AREA_MIN;
+    g_NDIL_CNT = params->NDIL_CNT;
+}
+
+extern "C" INSPECT_API void GetInspectParams(InspectParams* params)
+{
+    if (!params) return;
+    params->D_FORM_MIN_AREA_RATIO = g_D_FORM_MIN_AREA_RATIO;
+    params->D_ROUNDNESS = g_D_ROUNDNESS;
+    params->D_DARK_AREA_PERCENT = g_D_DARK_AREA_PERCENT;
+    params->D_LINEAR_BASE_BRIGHT = g_D_LINEAR_BASE_BRIGHT;
+    params->D_LINE_ANGLE_LOW = g_D_LINE_ANGLE_LOW;
+    params->D_LINE_ANGLE_HIGH = g_D_LINE_ANGLE_HIGH;
+
+    params->D_WHITE_PEAK_IF = g_D_WHITE_PEAK_IF;
+    params->D_WHITE_PEAK_ELSEIF = g_D_WHITE_PEAK_ELSEIF;
+    params->D_WHITE_RATIO = g_D_WHITE_RATIO;
+    params->D_WHITE_LINE_PEAK = g_D_WHITE_LINE_PEAK;
+
+    params->D_LINEARITY_RATIO = g_D_LINEARITY_RATIO;
+    params->AREA_MIN = g_AREA_MIN;
+    params->NDIL_CNT = g_NDIL_CNT;
+}
+
+// ============================================================
+// 로직트리 기반 최종 불량 타입 판정 (기존 코드에서 기본 상수 대신 전역변수 사용)
 // ============================================================
 static int ClassifyDefectType(const BlobFeature& f, bool bIsLinear)
 {
@@ -113,49 +165,45 @@ static int ClassifyDefectType(const BlobFeature& f, bool bIsLinear)
     {
         if (!bIsLinear)
         {
-            // ---- 비선형 다크 ----
-            if (f.areaRatio > D_FORM_MIN_AREA_RATIO)
+            if (f.areaRatio > g_D_FORM_MIN_AREA_RATIO)
             {
-                // B-면적비율 > [D] 형태 판단 최소면 : TRUE
-                if (f.circularity > D_ROUNDNESS)
+                if (f.circularity > g_D_ROUNDNESS)
                 {
-                    // 불량 진원도 > [D] 진원도 : TRUE
-                    if (f.areaObjPercent > D_DARK_AREA_PERCENT)
+                    if (f.areaObjPercent > g_D_DARK_AREA_PERCENT)
                     {
-                        nResultType = DEFECT_CRATER;      // 분화구
+                        nResultType = DEFECT_CRATER;
                     }
                     else
                     {
-                        nResultType = DEFECT_CRACK;       // 크랙
+                        nResultType = DEFECT_CRACK;
                     }
                 }
                 else
                 {
-                    nResultType = DEFECT_CRACK;           // 크랙 (진원도 FALSE)
+                    nResultType = DEFECT_CRACK;
                 }
             }
             else
             {
-                nResultType = DEFECT_WEAK_POINT_D;        // 다크 약불량
+                nResultType = DEFECT_WEAK_POINT_D;
             }
         }
         else
         {
-            // ---- 선형 다크 ----
-            if (f.peakMax > D_LINEAR_BASE_BRIGHT)
+            if (f.peakMax > g_D_LINEAR_BASE_BRIGHT)
             {
-                if (f.angleDeg < D_LINE_ANGLE_LOW || f.angleDeg > D_LINE_ANGLE_HIGH)
+                if (f.angleDeg < g_D_LINE_ANGLE_LOW || f.angleDeg > g_D_LINE_ANGLE_HIGH)
                 {
-                    nResultType = DEFECT_SCRATCH;         // 스크래치
+                    nResultType = DEFECT_SCRATCH;
                 }
                 else
                 {
-                    nResultType = DEFECT_CRACK;           // 크랙
+                    nResultType = DEFECT_CRACK;
                 }
             }
             else
             {
-                nResultType = DEFECT_BLACK_WEAK;          // 흑 약불량
+                nResultType = DEFECT_BLACK_WEAK;
             }
         }
     }
@@ -163,38 +211,35 @@ static int ClassifyDefectType(const BlobFeature& f, bool bIsLinear)
     {
         if (!bIsLinear)
         {
-            // ---- 비선형 백 ----
-            if (f.peakMax > D_WHITE_PEAK_IF)
+            if (f.peakMax > g_D_WHITE_PEAK_IF)
             {
-                nResultType = DEFECT_PINHOLE;             // 핀홀 (IF)
+                nResultType = DEFECT_PINHOLE;
             }
-            else if (f.peakMax > D_WHITE_PEAK_ELSEIF)
+            else if (f.peakMax > g_D_WHITE_PEAK_ELSEIF)
             {
-                // Else if
-                if (f.ratioMopol > D_WHITE_RATIO)
+                if (f.ratioMopol > g_D_WHITE_RATIO)
                 {
-                    nResultType = DEFECT_MICRO_SCRATCH;   // 미세긁힘
+                    nResultType = DEFECT_MICRO_SCRATCH;
                 }
                 else
                 {
-                    nResultType = DEFECT_DENT;            // 찍힘
+                    nResultType = DEFECT_DENT;
                 }
             }
             else
             {
-                nResultType = DEFECT_WHITE_WEAK;          // else -> 화이트 약불량
+                nResultType = DEFECT_WHITE_WEAK;
             }
         }
         else
         {
-            // ---- 선형 백 ----
-            if (f.peakMax < D_WHITE_LINE_PEAK)
+            if (f.peakMax < g_D_WHITE_LINE_PEAK)
             {
-                nResultType = DEFECT_LINE;                // 라인
+                nResultType = DEFECT_LINE;
             }
             else
             {
-                nResultType = DEFECT_MICRO_SCRATCH;       // 미세긁힘
+                nResultType = DEFECT_MICRO_SCRATCH;
             }
         }
     }
@@ -203,7 +248,7 @@ static int ClassifyDefectType(const BlobFeature& f, bool bIsLinear)
 }
 
 // ============================================================
-// InspectImage : CChain 기반 blob 검사 진입점
+// InspectImage : CChain 기반 blob 검사 진입점 (AREA_MIN, NDIL_CNT 등 전역변수 사용)
 // ============================================================
 extern "C" INSPECT_API int InspectImage(
     const unsigned char* bgr32, int width, int height, int stride, int threshold,
@@ -211,7 +256,6 @@ extern "C" INSPECT_API int InspectImage(
 {
     if (!bgr32 || !results || width <= 0 || height <= 0 || maxResults <= 0) return 0;
 
-    // ---- BGR32 -> Gray 변환 ----
     std::unique_ptr<unsigned char[]> pGray(new unsigned char[width * height]);
     for (int y = 0; y < height; ++y)
     {
@@ -220,11 +264,10 @@ extern "C" INSPECT_API int InspectImage(
         {
             const unsigned char* px = row + x * 4;
             pGray[y * width + x] = static_cast<unsigned char>(
-                (px[0] * 114 + px[1] * 587 + px[2] * 299) / 1000); // B,G,R 가중 평균
+                (px[0] * 114 + px[1] * 587 + px[2] * 299) / 1000);
         }
     }
 
-    // ---- 전역 평균 산출 ----
     long sum = 0;
     for (int i = 0; i < width * height; ++i) sum += pGray[i];
     double meanGlobal = static_cast<double>(sum) / (width * height);
@@ -232,7 +275,6 @@ extern "C" INSPECT_API int InspectImage(
     double darkCut = std::max<double>(0.0, meanGlobal - static_cast<double>(threshold));
     double whiteCut = std::min<double>(255.0, meanGlobal + static_cast<double>(threshold));
 
-    // ---- 다크/화이트 이진화 ----
     std::unique_ptr<unsigned char[]> pBinDark(new unsigned char[width * height]);
     std::unique_ptr<unsigned char[]> pBinWhite(new unsigned char[width * height]);
     for (int i = 0; i < width * height; ++i)
@@ -241,24 +283,20 @@ extern "C" INSPECT_API int InspectImage(
         pBinWhite[i] = (pGray[i] > whiteCut) ? 255 : 0;
     }
 
-    // ---- CChain 으로 blob 추출 (다크) ----
-    std::unique_ptr<CChain> pChain_B(new CChain(AREA_MIN, 100000));
+    std::unique_ptr<CChain> pChain_B(new CChain(g_AREA_MIN, 100000));
     pChain_B->SetChainData(1, pBinDark.get(), 1, 1, 2, 100000, width, height);
     int nBlobCnt_B = pChain_B->FastChain(1, 1, width - 1, height - 1);
 
-    // ---- CChain 으로 blob 추출 (화이트) ----
-    std::unique_ptr<CChain> pChain_W(new CChain(AREA_MIN, 100000));
+    std::unique_ptr<CChain> pChain_W(new CChain(g_AREA_MIN, 100000));
     pChain_W->SetChainData(1, pBinWhite.get(), 1, 1, 2, 100000, width, height);
     int nBlobCnt_W = pChain_W->FastChain(1, 1, width - 1, height - 1);
 
-    // ---- 핀홀류 모폴로지(팽창) blob (dRatio_mopol 산출용, doc5와 동일 절차) ----
     std::unique_ptr<unsigned char[]> pOriBinary(new unsigned char[width * height]);
     std::unique_ptr<unsigned char[]> pMopol(new unsigned char[width * height]);
     memcpy(pOriBinary.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
     memcpy(pMopol.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
 
-    // Dilate_BinaryMini 는 기존 doc5와 동일한 팽창 함수 사용 (프로젝트 공용 유틸)
-    for (int i = 0; i < NDIL_CNT; ++i)
+    for (int i = 0; i < g_NDIL_CNT; ++i)
     {
         Dilate_BinaryMini(pOriBinary.get(), pMopol.get(), width, height, width);
     }
@@ -269,13 +307,10 @@ extern "C" INSPECT_API int InspectImage(
 
     std::vector<BlobFeature> feats;
 
-    // ============================================================
-    // 다크 blob 특징 추출
-    // ============================================================
     for (int i = 0; i < nBlobCnt_B && (int)feats.size() < maxResults; ++i)
     {
         double dArea = pChain_B->Chain_Area(i);
-        if (dArea < AREA_MIN) continue;
+        if (dArea < g_AREA_MIN) continue;
 
         int nx1 = pChain_B->FindMinX(i);
         int nx2 = pChain_B->FindMaxX(i);
@@ -289,10 +324,9 @@ extern "C" INSPECT_API int InspectImage(
         f.x = nx1; f.y = ny1; f.w = static_cast<int>(dW); f.h = static_cast<int>(dH);
         f.area = dArea;
         f.areaRatio = dArea / (dW * dH);
-        f.circularity = pChain_B->FindCompactness(i);   // 진원도
+        f.circularity = pChain_B->FindCompactness(i);
         f.angleDeg = std::abs(pChain_B->FindAngle(i));
 
-        // 피크치 (선형 불량 밝기 판정용) : compMask 영역 min/max 편차
         double dMinTemp = 255.0, dMaxTemp = 0.0;
         for (int yy = ny1; yy <= ny2 && yy < height; ++yy)
         {
@@ -307,20 +341,17 @@ extern "C" INSPECT_API int InspectImage(
         f.peakMax = dMaxTemp;
 
         f.areaObjPercent = dArea / (static_cast<double>(width) * static_cast<double>(height));
-        f.ratioMopol = 0.0; // 다크쪽은 사용 안 함
-        f.ratio = dH / dW;   // 세로:가로
+        f.ratioMopol = 0.0;
+        f.ratio = dH / dW;
         f.isDark = true;
 
         feats.push_back(f);
     }
 
-    // ============================================================
-    // 화이트 blob 특징 추출
-    // ============================================================
     for (int i = 0; i < nBlobCnt_W && (int)feats.size() < maxResults; ++i)
     {
         double dArea = pChain_W->Chain_Area(i);
-        if (dArea < AREA_MIN) continue;
+        if (dArea < g_AREA_MIN) continue;
 
         int nx1 = pChain_W->FindMinX(i);
         int nx2 = pChain_W->FindMaxX(i);
@@ -352,7 +383,6 @@ extern "C" INSPECT_API int InspectImage(
 
         f.areaObjPercent = dArea / (static_cast<double>(width) * static_cast<double>(height));
 
-        // dRatio_mopol : 가장 큰 모폴로지 blob 기준 (doc5 방식)
         double dSizeMaxMopol = 0.0;
         int    nManIdxMopol = 0;
         for (int m = 0; m < nBlobCnt_mopol; ++m)
@@ -381,7 +411,6 @@ extern "C" INSPECT_API int InspectImage(
         feats.push_back(f);
     }
 
-    // ---- 큰 순서로 정렬 후 결과 채우기 ----
     std::sort(feats.begin(), feats.end(), [](const BlobFeature& a, const BlobFeature& b) {
         return a.area > b.area;
         });
@@ -404,7 +433,6 @@ extern "C" INSPECT_API int InspectImage(
         results[i].isDark = f.isDark ? 1 : 0;
         results[i].isLinear = bIsLinear ? 1 : 0;
 
-        // ---- doc10 UI 동기화용 특징값 그대로 전달 ----
         results[i].areaRatio = f.areaRatio;
         results[i].circularity = f.circularity;
         results[i].angleDeg = f.angleDeg;
