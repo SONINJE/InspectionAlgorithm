@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System.IO;
+using Path = System.IO.Path;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -8,7 +9,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Collections.Generic;
 using System;
-using System.Windows.Input; // 추가
+using System.Windows.Input;
+using System.Text.Json;
 
 namespace InspectionLogicViewer.Wpf;
 
@@ -29,7 +31,7 @@ public partial class MainWindow : Window
     private Point _panStart; // 윈도우 좌표계 시작점
     private double _panOriginX, _panOriginY; // 시작 시의 translate 값
 
-    // 네이티브 파라미터 (기본값은 기존 상수와 동일)
+    // 파라미터 (기본값)
     private double _D_FORM_MIN_AREA_RATIO = 0.25;
     private double _D_ROUNDNESS = 0.60;
     private double _D_DARK_AREA_PERCENT = 0.05;
@@ -44,7 +46,8 @@ public partial class MainWindow : Window
     private int    _AREA_MIN = 4;
     private int    _NDIL_CNT = 2;
 
-    private bool _nativeLoaded = false;
+    // JSON 파일 경로
+    private readonly string _paramsFilePath = Path.Combine(AppContext.BaseDirectory, "inspect_params.json");
 
     public MainWindow()
     {
@@ -63,12 +66,18 @@ public partial class MainWindow : Window
         LogicCanvas.MouseLeftButtonUp += LogicCanvas_MouseLeftButtonUp;
         LogicCanvas.MouseLeave += LogicCanvas_MouseLeave;
 
-        // 기본 파라미터를 UI에 채움
-        FillParameterControlsWithFields();
+        // JSON에서 파라미터 불러오기 (있으면 반영)
+        try
+        {
+            LoadParamsFromJson();
+        }
+        catch
+        {
+            // 실패 시 기본값 유지
+        }
 
-        // 시도: 네이티브가 있으면 값 불러오기 (실패 시 무시)
-        try { EnsureNativeLoaded(); GetInspectParams(out var p); ApplyNativeParamsToFields(p); FillParameterControlsWithFields(); }
-        catch { /* 네이티브 없으면 기본값 유지 */ }
+        // UI에 파라미터 채우기
+        FillParameterControlsWithFields();
     }
 
     private void FillParameterControlsWithFields()
@@ -106,8 +115,56 @@ public partial class MainWindow : Window
         if (int.TryParse(Param_NdilCnt.Text, out iv)) _NDIL_CNT = iv;
     }
 
-    private void ApplyNativeParamsToFields(InspectParamsNative p)
+    // JSON 모델
+    private class InspectParamsJson
     {
+        public double D_FORM_MIN_AREA_RATIO { get; set; }
+        public double D_ROUNDNESS { get; set; }
+        public double D_DARK_AREA_PERCENT { get; set; }
+        public double D_LINEAR_BASE_BRIGHT { get; set; }
+        public double D_LINE_ANGLE_LOW { get; set; }
+        public double D_LINE_ANGLE_HIGH { get; set; }
+        public double D_WHITE_PEAK_IF { get; set; }
+        public double D_WHITE_PEAK_ELSEIF { get; set; }
+        public double D_WHITE_RATIO { get; set; }
+        public double D_WHITE_LINE_PEAK { get; set; }
+        public double D_LINEARITY_RATIO { get; set; }
+        public int AREA_MIN { get; set; }
+        public int NDIL_CNT { get; set; }
+    }
+
+    private void SaveParamsToJson()
+    {
+        var p = new InspectParamsJson
+        {
+            D_FORM_MIN_AREA_RATIO = _D_FORM_MIN_AREA_RATIO,
+            D_ROUNDNESS = _D_ROUNDNESS,
+            D_DARK_AREA_PERCENT = _D_DARK_AREA_PERCENT,
+            D_LINEAR_BASE_BRIGHT = _D_LINEAR_BASE_BRIGHT,
+            D_LINE_ANGLE_LOW = _D_LINE_ANGLE_LOW,
+            D_LINE_ANGLE_HIGH = _D_LINE_ANGLE_HIGH,
+            D_WHITE_PEAK_IF = _D_WHITE_PEAK_IF,
+            D_WHITE_PEAK_ELSEIF = _D_WHITE_PEAK_ELSEIF,
+            D_WHITE_RATIO = _D_WHITE_RATIO,
+            D_WHITE_LINE_PEAK = _D_WHITE_LINE_PEAK,
+            D_LINEARITY_RATIO = _D_LINEARITY_RATIO,
+            AREA_MIN = _AREA_MIN,
+            NDIL_CNT = _NDIL_CNT
+        };
+
+        var opts = new JsonSerializerOptions { WriteIndented = true };
+        string json = JsonSerializer.Serialize(p, opts);
+        File.WriteAllText(_paramsFilePath, json);
+    }
+
+    private void LoadParamsFromJson()
+    {
+        if (!File.Exists(_paramsFilePath)) return;
+
+        string json = File.ReadAllText(_paramsFilePath);
+        var p = JsonSerializer.Deserialize<InspectParamsJson>(json);
+        if (p == null) return;
+
         _D_FORM_MIN_AREA_RATIO = p.D_FORM_MIN_AREA_RATIO;
         _D_ROUNDNESS = p.D_ROUNDNESS;
         _D_DARK_AREA_PERCENT = p.D_DARK_AREA_PERCENT;
@@ -123,20 +180,6 @@ public partial class MainWindow : Window
         _NDIL_CNT = p.NDIL_CNT;
     }
 
-    private void EnsureNativeLoaded()
-    {
-        if (_nativeLoaded) return;
-        try
-        {
-            System.Runtime.InteropServices.NativeLibrary.Load("InspectionAlgorithm.dll");
-            _nativeLoaded = true;
-        }
-        catch (Exception ex)
-        {
-            throw new DllNotFoundException("네이티브 DLL을 불러올 수 없음", ex);
-        }
-    }
-
     private void OpenImage_Click(object sender, RoutedEventArgs e)
     {
         var d = new OpenFileDialog { Filter = "Image|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff" };
@@ -147,7 +190,7 @@ public partial class MainWindow : Window
         _source = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgr32, null, 0);
         ImageView.Source = _source;
         _results.Clear(); DefectList.Items.Clear(); LogicTreeView.Items.Clear();
-        StatusText.Text = $"{System.IO.Path.GetFileName(d.FileName)}  {_source.PixelWidth} x {_source.PixelHeight}";
+        StatusText.Text = $"{Path.GetFileName(d.FileName)}  {_source.PixelWidth} x {_source.PixelHeight}";
     }
 
     // ScrollViewer의 PreviewMouseWheel 이벤트: 마우스 위치 기준으로 줌 처리
@@ -221,45 +264,8 @@ public partial class MainWindow : Window
         if (_source == null) { MessageBox.Show("먼저 이미지를 열어주세요."); return; }
         if (!int.TryParse(ThresholdBox.Text, out int threshold)) threshold = 35;
 
-        try
-        {
-            EnsureNativeLoaded();
-        }
-        catch (System.DllNotFoundException ex)
-        {
-            MessageBox.Show($"네이티브 DLL을 로드할 수 없음: {ex.Message}\n확인: DLL이 출력 폴더에 있는지, x64로 빌드되었는지 확인하세요.");
-            return;
-        }
-        catch (System.BadImageFormatException ex)
-        {
-            MessageBox.Show($"네이티브 DLL 아키텍처 불일치: {ex.Message}\n확인: 프로세스(x64)와 DLL(x86/x64)이 일치하는지 확인하세요.");
-            return;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"네이티브 DLL 로드 중 오류: {ex.Message}");
-            return;
-        }
-
-        // 먼저 로컬 필드 값을 네이티브로 보냄 (옵션)
+        // 로컬 파라미터를 적용 (UI -> 내부 값)
         ApplyFieldsToLocalParams();
-        var p = new InspectParamsNative
-        {
-            D_FORM_MIN_AREA_RATIO = _D_FORM_MIN_AREA_RATIO,
-            D_ROUNDNESS = _D_ROUNDNESS,
-            D_DARK_AREA_PERCENT = _D_DARK_AREA_PERCENT,
-            D_LINEAR_BASE_BRIGHT = _D_LINEAR_BASE_BRIGHT,
-            D_LINE_ANGLE_LOW = _D_LINE_ANGLE_LOW,
-            D_LINE_ANGLE_HIGH = _D_LINE_ANGLE_HIGH,
-            D_WHITE_PEAK_IF = _D_WHITE_PEAK_IF,
-            D_WHITE_PEAK_ELSEIF = _D_WHITE_PEAK_ELSEIF,
-            D_WHITE_RATIO = _D_WHITE_RATIO,
-            D_WHITE_LINE_PEAK = _D_WHITE_LINE_PEAK,
-            D_LINEARITY_RATIO = _D_LINEARITY_RATIO,
-            AREA_MIN = _AREA_MIN,
-            NDIL_CNT = _NDIL_CNT
-        };
-        try { SetInspectParams(ref p); } catch { /* 실패시 무시 */ }
 
         int stride = _source.PixelWidth * 4;
         byte[] pixels = new byte[stride * _source.PixelHeight];
@@ -273,7 +279,28 @@ public partial class MainWindow : Window
             count = InspectImage(h.AddrOfPinnedObject(), _source.PixelWidth, _source.PixelHeight,
                 stride, threshold, native, native.Length);
         }
-        finally { h.Free(); }
+        catch (DllNotFoundException ex)
+        {
+            MessageBox.Show($"네이티브 DLL을 찾을 수 없습니다: {ex.Message}");
+            h.Free();
+            return;
+        }
+        catch (BadImageFormatException ex)
+        {
+            MessageBox.Show($"네이티브 DLL 아키텍처 불일치: {ex.Message}");
+            h.Free();
+            return;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"검사 중 오류: {ex.Message}");
+            h.Free();
+            return;
+        }
+        finally
+        {
+            if (h.IsAllocated) h.Free();
+        }
 
         _results.Clear(); DefectList.Items.Clear();
         for (int i = 0; i < count; i++)
@@ -302,7 +329,6 @@ public partial class MainWindow : Window
         if (i < 0 || i >= _results.Count) return;
         var r = _results[i];
 
-        // 기존 표시 항목
         Fx.Text = r.X.ToString();
         Fy.Text = r.Y.ToString();
         Fw.Text = r.Width.ToString();
@@ -336,7 +362,6 @@ public partial class MainWindow : Window
                 int ch = Math.Max(1, Math.Min(r.Height, _source.PixelHeight - cy));
                 var rect = new Int32Rect(cx, cy, cw, ch);
                 var cb = new CroppedBitmap(_source, rect);
-                // optional: Crop preview 처리
             }
             catch { }
         }
@@ -357,15 +382,15 @@ public partial class MainWindow : Window
             var nodeLine = AddCondition(nodeDark, "라인성", isLinear ? "TRUE" : "FALSE", isLinear);
             if (!isLinear)
             {
-                var a = AddCondition(nodeLine, "불량 흑 면적비율 > PARA 형태 판단 최소면", r.AreaRatio, r.AreaRatio > 0.25);
-                var b = AddCondition(a, "불량 진원도 > PARA 흑 진원도", r.Circularity, r.Circularity > 0.60);
-                var c = AddCondition(b, "불량 면적% > PARA Dark면적%", r.AreaObjPercent, r.AreaObjPercent > 0.05);
+                var a = AddCondition(nodeLine, "불량 흑 면적비율 > PARA 형태 판단 최소면", r.AreaRatio, r.AreaRatio > _D_FORM_MIN_AREA_RATIO);
+                var b = AddCondition(a, "불량 진원도 > PARA 흑 진원도", r.Circularity, r.Circularity > _D_ROUNDNESS);
+                var c = AddCondition(b, "불량 면적% > PARA Dark면적%", r.AreaObjPercent, r.AreaObjPercent > _D_DARK_AREA_PERCENT);
                 AddResult(c, "분화구 / 크랙 / WEAK_POINT_D");
             }
             else
             {
-                var a = AddCondition(nodeLine, "다크 피크치 > PARA 선형 불량 기준밝기", r.PeakMax, r.PeakMax > 40.0);
-                var b = AddCondition(a, "불량각도 < PARA 10도 or >90도", r.AngleDeg, r.AngleDeg < 10.0 || r.AngleDeg > 90.0);
+                var a = AddCondition(nodeLine, "다크 피크치 > PARA 선형 불량 기준밝기", r.PeakMax, r.PeakMax > _D_LINEAR_BASE_BRIGHT);
+                var b = AddCondition(a, "불량각도 < PARA 10도 or >90도", r.AngleDeg, r.AngleDeg < _D_LINE_ANGLE_LOW || r.AngleDeg > _D_LINE_ANGLE_HIGH);
                 AddResult(b, "스크래치 / 크랙 / PARA 흑 약불량");
             }
         }
@@ -374,21 +399,19 @@ public partial class MainWindow : Window
             var nodeWhite = AddCondition(root, "화이트성", "TRUE", true);
             var nodeLineW = AddCondition(nodeWhite, "라인성", isLinear ? "TRUE" : "FALSE", isLinear);
 
-            // white: 다크와 동일한 구조 — 라인성 TRUE/FALSE로 분기
             if (!isLinear)
             {
-                // 비선형(라인성 == FALSE) : IF / ELSE IF / ELSE
-                var ifNode = AddCondition(nodeLineW, "PARA 불량 PEAK > WHITE_PEAK (IF)", r.PeakMax, r.PeakMax > 60.0);
-                if (r.PeakMax > 60.0) AddResult(ifNode, "핀홀");
+                var ifNode = AddCondition(nodeLineW, "PARA 불량 PEAK > WHITE_PEAK (IF)", r.PeakMax, r.PeakMax > _D_WHITE_PEAK_IF);
+                if (r.PeakMax > _D_WHITE_PEAK_IF) AddResult(ifNode, "핀홀");
 
-                var elifNode = AddCondition(nodeLineW, "PARA 불량 PEAK > WHITE_PEAK (Else if)", r.PeakMax, r.PeakMax > 40.0 && r.PeakMax <= 60.0);
-                if (r.PeakMax > 40.0 && r.PeakMax <= 60.0)
+                var elifNode = AddCondition(nodeLineW, "PARA 불량 PEAK > WHITE_PEAK (Else if)", r.PeakMax, r.PeakMax > _D_WHITE_PEAK_ELSEIF && r.PeakMax <= _D_WHITE_PEAK_IF);
+                if (r.PeakMax > _D_WHITE_PEAK_ELSEIF && r.PeakMax <= _D_WHITE_PEAK_IF)
                 {
-                    var ratioNode = AddCondition(elifNode, "dRatio_mopol > Ratio<White>", r.RatioMopol, r.RatioMopol > 1.5);
-                    AddResult(ratioNode, r.RatioMopol > 1.5 ? "미세긁힘" : "찍힘");
+                    var ratioNode = AddCondition(elifNode, "dRatio_mopol > Ratio<White>", r.RatioMopol, r.RatioMopol > _D_WHITE_RATIO);
+                    AddResult(ratioNode, r.RatioMopol > _D_WHITE_RATIO ? "미세긁힘" : "찍힘");
                 }
 
-                if (r.PeakMax <= 40.0)
+                if (r.PeakMax <= _D_WHITE_PEAK_ELSEIF)
                 {
                     var elseNode = AddCondition(nodeLineW, "화이트 약불량 (Else)", r.PeakMax, true);
                     AddResult(elseNode, "화이트 약불량");
@@ -396,9 +419,8 @@ public partial class MainWindow : Window
             }
             else
             {
-                // 선형(라인성 == TRUE) : Value(라인) 조건으로 이동
-                var a = AddCondition(nodeLineW, "Value(라인) < WHITE_PEAK", r.PeakMax, r.PeakMax < 50.0);
-                AddResult(a, r.PeakMax < 50.0 ? "라인 / 미세긁힘(라인)" : "미세긁힘");
+                var a = AddCondition(nodeLineW, "Value(라인) < WHITE_PEAK", r.PeakMax, r.PeakMax < _D_WHITE_LINE_PEAK);
+                AddResult(a, r.PeakMax < _D_WHITE_LINE_PEAK ? "라인 / 미세긁힘(라인)" : "미세긁힘");
             }
         }
 
@@ -424,98 +446,45 @@ public partial class MainWindow : Window
     private static extern int InspectImage(IntPtr image, int width, int height, int stride, int threshold,
         [Out] DefectResultNative[] results, int maxResults);
 
-    // 새로운 네이티브 파라미터 구조체 및 함수
-    [StructLayout(LayoutKind.Sequential, Pack = 8)]
-    private struct InspectParamsNative
-    {
-        public double D_FORM_MIN_AREA_RATIO;
-        public double D_ROUNDNESS;
-        public double D_DARK_AREA_PERCENT;
-        public double D_LINEAR_BASE_BRIGHT;
-        public double D_LINE_ANGLE_LOW;
-        public double D_LINE_ANGLE_HIGH;
-        public double D_WHITE_PEAK_IF;
-        public double D_WHITE_PEAK_ELSEIF;
-        public double D_WHITE_RATIO;
-        public double D_WHITE_LINE_PEAK;
-        public double D_LINEARITY_RATIO;
-        public int AREA_MIN;
-        public int NDIL_CNT;
-    }
-
-    [DllImport("InspectionAlgorithm.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void SetInspectParams([In] ref InspectParamsNative p);
-
-    [DllImport("InspectionAlgorithm.dll", CallingConvention = CallingConvention.Cdecl)]
-    private static extern void GetInspectParams(out InspectParamsNative p);
-
     private void ApplyParams_Click(object sender, RoutedEventArgs e)
     {
+        // UI -> 내부값 반영, JSON 저장
         ApplyFieldsToLocalParams();
-
         try
         {
-            EnsureNativeLoaded();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"네이티브 DLL 로드 실패: {ex.Message}");
-            return;
-        }
-
-        var p = new InspectParamsNative
-        {
-            D_FORM_MIN_AREA_RATIO = _D_FORM_MIN_AREA_RATIO,
-            D_ROUNDNESS = _D_ROUNDNESS,
-            D_DARK_AREA_PERCENT = _D_DARK_AREA_PERCENT,
-            D_LINEAR_BASE_BRIGHT = _D_LINEAR_BASE_BRIGHT,
-            D_LINE_ANGLE_LOW = _D_LINE_ANGLE_LOW,
-            D_LINE_ANGLE_HIGH = _D_LINE_ANGLE_HIGH,
-            D_WHITE_PEAK_IF = _D_WHITE_PEAK_IF,
-            D_WHITE_PEAK_ELSEIF = _D_WHITE_PEAK_ELSEIF,
-            D_WHITE_RATIO = _D_WHITE_RATIO,
-            D_WHITE_LINE_PEAK = _D_WHITE_LINE_PEAK,
-            D_LINEARITY_RATIO = _D_LINEARITY_RATIO,
-            AREA_MIN = _AREA_MIN,
-            NDIL_CNT = _NDIL_CNT
-        };
-
-        try
-        {
-            SetInspectParams(ref p);
+            SaveParamsToJson();
             if (DefectList.SelectedIndex >= 0 && DefectList.SelectedIndex < _results.Count)
             {
                 DrawLogicDiagramInCanvas(LogicCanvas, _results[DefectList.SelectedIndex]);
             }
-            MessageBox.Show("네이티브 파라미터에 적용했습니다.");
+            MessageBox.Show("파라미터를 JSON에 저장했습니다.");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"파라미터 적용 실패: {ex.Message}");
+            MessageBox.Show($"파라미터 저장 실패: {ex.Message}");
         }
     }
 
     private void LoadParamsFromNative_Click(object sender, RoutedEventArgs e)
     {
+        // 버튼 명은 그대로 유지했으나 내부는 JSON 로드
         try
         {
-            EnsureNativeLoaded();
-            GetInspectParams(out var p);
-            ApplyNativeParamsToFields(p);
+            LoadParamsFromJson();
             FillParameterControlsWithFields();
-            MessageBox.Show("네이티브 파라미터를 불러왔습니다.");
+            MessageBox.Show("JSON에서 파라미터를 불러왔습니다.");
             if (DefectList.SelectedIndex >= 0 && DefectList.SelectedIndex < _results.Count)
                 DrawLogicDiagramInCanvas(LogicCanvas, _results[DefectList.SelectedIndex]);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"네이티브 파라미터 불러오기 실패: {ex.Message}");
+            MessageBox.Show($"파라미터 불러오기 실패: {ex.Message}");
         }
     }
 
     private void ResetParams_Click(object sender, RoutedEventArgs e)
     {
-        // 기본값으로 리셋
+        // 기본값으로 리셋 (UI 반영, JSON에 저장은 선택적)
         _D_FORM_MIN_AREA_RATIO = 0.25;
         _D_ROUNDNESS = 0.60;
         _D_DARK_AREA_PERCENT = 0.05;
@@ -532,13 +501,12 @@ public partial class MainWindow : Window
         FillParameterControlsWithFields();
     }
 
-    // 다이어그램을 UI 내 캔버스에 그리는 함수 (인스턴스 필드를 사용하도록 변경)
+    // 다이어그램 그리기 함수는 기존 로직 유지 (필드값 사용)
     private void DrawLogicDiagramInCanvas(Canvas canvas, DefectResult r)
     {
         if (canvas == null) return;
         canvas.Children.Clear();
 
-        // 네이티브와 동일한 임계값을 인스턴스 필드에서 사용
         bool isDark = r.IsDark;
         bool isLinear = r.IsLinear;
 
