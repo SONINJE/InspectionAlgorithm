@@ -67,6 +67,41 @@ static bool IsLinearBlob(const BlobFeature& f)
     return f.ratio > D_LINEARITY_RATIO;
 }
 
+static int Dilate_BinaryMini(LPBYTE fmSour, LPBYTE fmDest, int nWidth, int nHeight, int nPitch)
+{
+    // 확장 연산에 사용되는 3x3 커널 크기 및 중심 좌표 설정
+    int nOrgX{}, nOrgY{};
+    int nKernelSizeY{}, nKernelSizeX{};
+    nKernelSizeY = nKernelSizeX = 3;
+    //바이너리 된 이미지를 탐색하며 3x3 커널내에 255 값이 하나라도 존재한다면 중앙값을 255로 치환한다.  
+    int kernel[9]{};
+    for (int i = 0; i < 9; i++) kernel[i] = 1;
+
+    //중심 좌표 Set
+    nOrgX = static_cast<int>(nKernelSizeX / 2.0 - 0.5);
+    nOrgY = static_cast<int>(nKernelSizeY / 2.0 - 0.5);
+
+    // 받아온 이미지의 픽셀을 팽창 연산 수행하여 출력 이미지에 저장
+    for (int i = 0; i < nHeight - nKernelSizeY; i++) {
+        for (int j = 0; j < nWidth - nKernelSizeX; j++) {
+            // 커널을 사용하여 팽창 연산 수행
+            for (int k = 0; k < nKernelSizeY; k++) {
+                for (int l = 0; l < nKernelSizeX; l++) {
+                    // 이진화된 이미지에서 0(False)가 아닌 경우 255로 설정
+                    if (*(fmSour + (i + k) * nWidth + j + l)) {
+                        *(fmDest + (i + nOrgY) * nWidth + j + nOrgX) = 255;
+                        goto LOOP;  // 내부 루프를 빠져나가기 위한 goto
+                    }
+                    *(fmDest + (i + nOrgY) * nWidth + j + nOrgX) = 0;
+                }
+            }
+        LOOP: continue;
+        }
+    }
+
+    return 1;  // 확장 연산 완료
+}
+
 // ============================================================
 // 로직트리 기반 최종 불량 타입 판정
 // ============================================================
@@ -223,10 +258,10 @@ extern "C" INSPECT_API int InspectImage(
     memcpy(pMopol.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
 
     // Dilate_BinaryMini 는 기존 doc5와 동일한 팽창 함수 사용 (프로젝트 공용 유틸)
-    //for (int i = 0; i < NDIL_CNT; ++i)
-    //{
-    //    Dilate_BinaryMini(pOriBinary.get(), pMopol.get(), width, height, width);
-    //}
+    for (int i = 0; i < NDIL_CNT; ++i)
+    {
+        Dilate_BinaryMini(pOriBinary.get(), pMopol.get(), width, height, width);
+    }
 
     std::unique_ptr<CChain> pChain_mopol(new CChain(40, 100000));
     pChain_mopol->SetChainData(1, pMopol.get(), 1, 1, 2, 100000, width, height);
@@ -368,6 +403,14 @@ extern "C" INSPECT_API int InspectImage(
         results[i].defectType = defectType;
         results[i].isDark = f.isDark ? 1 : 0;
         results[i].isLinear = bIsLinear ? 1 : 0;
+
+        // ---- doc10 UI 동기화용 특징값 그대로 전달 ----
+        results[i].areaRatio = f.areaRatio;
+        results[i].circularity = f.circularity;
+        results[i].angleDeg = f.angleDeg;
+        results[i].peakMax = f.peakMax;
+        results[i].areaObjPercent = f.areaObjPercent;
+        results[i].ratioMopol = f.ratioMopol;
     }
 
     return count;
