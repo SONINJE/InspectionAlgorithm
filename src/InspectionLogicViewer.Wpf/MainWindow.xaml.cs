@@ -551,7 +551,7 @@ public sealed class DefectResult
     };
 }
 
-[StructLayout(LayoutKind.Sequential)]
+[StructLayout(LayoutKind.Sequential, Pack = 8)]
 public struct DefectResultNative
 {
     public int x, y, width, height;
@@ -576,7 +576,7 @@ public struct DefectResultNative
         Height = height,
         Area = area,
         Mean = mean,
-        AspectRatio = aspectratio(),
+        AspectRatio = aspectRatio,
         DefectType = (DefectType)defectType,
         IsDark = isDark == 1,
         IsLinear = isLinear == 1,
@@ -588,8 +588,4 @@ public struct DefectResultNative
         AreaObjPercent = areaObjPercent,
         RatioMopol = ratioMopol
     };
-
-    private double aspectratio() => aspectratio_field();
-    private double aspectratio_field() { return aspectratio_internal; }
-    private double aspectratio_internal;
 }

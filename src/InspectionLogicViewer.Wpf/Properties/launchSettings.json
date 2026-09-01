@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "InspectionLogicViewer.Wpf": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
