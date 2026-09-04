@@ -1,0 +1,10 @@
+<Window x:Class="InspectionLogicViewer.Wpf.CropWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Cropped" Width="520" Height="520" Background="White" WindowStartupLocation="CenterOwner" FontFamily="Segoe UI">
+    <Grid Margin="8">
+        <ScrollViewer>
+            <Image x:Name="CropImage" Stretch="None" />
+        </ScrollViewer>
+    </Grid>
+</Window>

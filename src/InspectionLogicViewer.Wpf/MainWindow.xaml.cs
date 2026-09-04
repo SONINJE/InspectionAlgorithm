@@ -28,8 +28,8 @@ public partial class MainWindow : Window
 
     // Pan(잡고 끌기) 관련 필드
     private bool _isPanning = false;
-    private Point _panStart; // 윈도우 좌표계 시작점
-    private double _panOriginX, _panOriginY; // 시작 시의 translate 값
+    private Point _panStart;
+    private double _panOriginX, _panOriginY;
 
     // 파라미터 (기본값)
     private double _D_FORM_MIN_AREA_RATIO = 0.25;
@@ -46,14 +46,12 @@ public partial class MainWindow : Window
     private int    _AREA_MIN = 4;
     private int    _NDIL_CNT = 2;
 
-    // JSON 파일 경로
     private readonly string _paramsFilePath = Path.Combine(AppContext.BaseDirectory, "inspect_params.json");
 
     public MainWindow()
     {
         InitializeComponent();
 
-        // LogicCanvas에 Transform 설정 (Scale -> Translate)
         var tg = new TransformGroup();
         tg.Children.Add(_logicScale);
         tg.Children.Add(_logicTranslate);
@@ -66,118 +64,17 @@ public partial class MainWindow : Window
         LogicCanvas.MouseLeftButtonUp += LogicCanvas_MouseLeftButtonUp;
         LogicCanvas.MouseLeave += LogicCanvas_MouseLeave;
 
-        // JSON에서 파라미터 불러오기 (있으면 반영)
-        try
+        try { LoadParamsFromJson(); } catch { }
+
+        // 초기 상태: overlay 캔버스 크기 동기화
+        ImageOverlayCanvas.Width = ImageView.ActualWidth;
+        ImageOverlayCanvas.Height = ImageView.ActualHeight;
+
+        ImageView.SizeChanged += (s, e) =>
         {
-            LoadParamsFromJson();
-        }
-        catch
-        {
-            // 실패 시 기본값 유지
-        }
-
-        // UI에 파라미터 채우기
-        FillParameterControlsWithFields();
-    }
-
-    private void FillParameterControlsWithFields()
-    {
-        Param_dark_Ratio.Text = _D_FORM_MIN_AREA_RATIO.ToString("G");
-        Param_Roundness.Text = _D_ROUNDNESS.ToString("G");
-        Param_DarkAreaPercent.Text = _D_DARK_AREA_PERCENT.ToString("G");
-        Param_LinearBaseBright.Text = _D_LINEAR_BASE_BRIGHT.ToString("G");
-        Param_LineAngleLow.Text = _D_LINE_ANGLE_LOW.ToString("G");
-        Param_LineAngleHigh.Text = _D_LINE_ANGLE_HIGH.ToString("G");
-        Param_WhitePeakIf.Text = _D_WHITE_PEAK_IF.ToString("G");
-        Param_WhitePeakElseIf.Text = _D_WHITE_PEAK_ELSEIF.ToString("G");
-        Param_WhiteRatio.Text = _D_WHITE_RATIO.ToString("G");
-        Param_WhiteLinePeak.Text = _D_WHITE_LINE_PEAK.ToString("G");
-        Param_LinearityRatio.Text = _D_LINEARITY_RATIO.ToString("G");
-        Param_AreaMin.Text = _AREA_MIN.ToString();
-        Param_NdilCnt.Text = _NDIL_CNT.ToString();
-    }
-
-    private void ApplyFieldsToLocalParams()
-    {
-        double dv; int iv;
-        if (double.TryParse(Param_dark_Ratio.Text, out dv)) _D_FORM_MIN_AREA_RATIO = dv;
-        if (double.TryParse(Param_Roundness.Text, out dv)) _D_ROUNDNESS = dv;
-        if (double.TryParse(Param_DarkAreaPercent.Text, out dv)) _D_DARK_AREA_PERCENT = dv;
-        if (double.TryParse(Param_LinearBaseBright.Text, out dv)) _D_LINEAR_BASE_BRIGHT = dv;
-        if (double.TryParse(Param_LineAngleLow.Text, out dv)) _D_LINE_ANGLE_LOW = dv;
-        if (double.TryParse(Param_LineAngleHigh.Text, out dv)) _D_LINE_ANGLE_HIGH = dv;
-        if (double.TryParse(Param_WhitePeakIf.Text, out dv)) _D_WHITE_PEAK_IF = dv;
-        if (double.TryParse(Param_WhitePeakElseIf.Text, out dv)) _D_WHITE_PEAK_ELSEIF = dv;
-        if (double.TryParse(Param_WhiteRatio.Text, out dv)) _D_WHITE_RATIO = dv;
-        if (double.TryParse(Param_WhiteLinePeak.Text, out dv)) _D_WHITE_LINE_PEAK = dv;
-        if (double.TryParse(Param_LinearityRatio.Text, out dv)) _D_LINEARITY_RATIO = dv;
-        if (int.TryParse(Param_AreaMin.Text, out iv)) _AREA_MIN = iv;
-        if (int.TryParse(Param_NdilCnt.Text, out iv)) _NDIL_CNT = iv;
-    }
-
-    // JSON 모델
-    private class InspectParamsJson
-    {
-        public double D_FORM_MIN_AREA_RATIO { get; set; }
-        public double D_ROUNDNESS { get; set; }
-        public double D_DARK_AREA_PERCENT { get; set; }
-        public double D_LINEAR_BASE_BRIGHT { get; set; }
-        public double D_LINE_ANGLE_LOW { get; set; }
-        public double D_LINE_ANGLE_HIGH { get; set; }
-        public double D_WHITE_PEAK_IF { get; set; }
-        public double D_WHITE_PEAK_ELSEIF { get; set; }
-        public double D_WHITE_RATIO { get; set; }
-        public double D_WHITE_LINE_PEAK { get; set; }
-        public double D_LINEARITY_RATIO { get; set; }
-        public int AREA_MIN { get; set; }
-        public int NDIL_CNT { get; set; }
-    }
-
-    private void SaveParamsToJson()
-    {
-        var p = new InspectParamsJson
-        {
-            D_FORM_MIN_AREA_RATIO = _D_FORM_MIN_AREA_RATIO,
-            D_ROUNDNESS = _D_ROUNDNESS,
-            D_DARK_AREA_PERCENT = _D_DARK_AREA_PERCENT,
-            D_LINEAR_BASE_BRIGHT = _D_LINEAR_BASE_BRIGHT,
-            D_LINE_ANGLE_LOW = _D_LINE_ANGLE_LOW,
-            D_LINE_ANGLE_HIGH = _D_LINE_ANGLE_HIGH,
-            D_WHITE_PEAK_IF = _D_WHITE_PEAK_IF,
-            D_WHITE_PEAK_ELSEIF = _D_WHITE_PEAK_ELSEIF,
-            D_WHITE_RATIO = _D_WHITE_RATIO,
-            D_WHITE_LINE_PEAK = _D_WHITE_LINE_PEAK,
-            D_LINEARITY_RATIO = _D_LINEARITY_RATIO,
-            AREA_MIN = _AREA_MIN,
-            NDIL_CNT = _NDIL_CNT
+            ImageOverlayCanvas.Width = ImageView.ActualWidth;
+            ImageOverlayCanvas.Height = ImageView.ActualHeight;
         };
-
-        var opts = new JsonSerializerOptions { WriteIndented = true };
-        string json = JsonSerializer.Serialize(p, opts);
-        File.WriteAllText(_paramsFilePath, json);
-    }
-
-    private void LoadParamsFromJson()
-    {
-        if (!File.Exists(_paramsFilePath)) return;
-
-        string json = File.ReadAllText(_paramsFilePath);
-        var p = JsonSerializer.Deserialize<InspectParamsJson>(json);
-        if (p == null) return;
-
-        _D_FORM_MIN_AREA_RATIO = p.D_FORM_MIN_AREA_RATIO;
-        _D_ROUNDNESS = p.D_ROUNDNESS;
-        _D_DARK_AREA_PERCENT = p.D_DARK_AREA_PERCENT;
-        _D_LINEAR_BASE_BRIGHT = p.D_LINEAR_BASE_BRIGHT;
-        _D_LINE_ANGLE_LOW = p.D_LINE_ANGLE_LOW;
-        _D_LINE_ANGLE_HIGH = p.D_LINE_ANGLE_HIGH;
-        _D_WHITE_PEAK_IF = p.D_WHITE_PEAK_IF;
-        _D_WHITE_PEAK_ELSEIF = p.D_WHITE_PEAK_ELSEIF;
-        _D_WHITE_RATIO = p.D_WHITE_RATIO;
-        _D_WHITE_LINE_PEAK = p.D_WHITE_LINE_PEAK;
-        _D_LINEARITY_RATIO = p.D_LINEARITY_RATIO;
-        _AREA_MIN = p.AREA_MIN;
-        _NDIL_CNT = p.NDIL_CNT;
     }
 
     private void OpenImage_Click(object sender, RoutedEventArgs e)
@@ -191,6 +88,7 @@ public partial class MainWindow : Window
         ImageView.Source = _source;
         _results.Clear(); DefectList.Items.Clear(); LogicTreeView.Items.Clear();
         StatusText.Text = $"{Path.GetFileName(d.FileName)}  {_source.PixelWidth} x {_source.PixelHeight}";
+        ClearImageOverlay();
     }
 
     // ScrollViewer의 PreviewMouseWheel 이벤트: 마우스 위치 기준으로 줌 처리
@@ -264,9 +162,6 @@ public partial class MainWindow : Window
         if (_source == null) { MessageBox.Show("먼저 이미지를 열어주세요."); return; }
         if (!int.TryParse(ThresholdBox.Text, out int threshold)) threshold = 35;
 
-        // 로컬 파라미터를 적용 (UI -> 내부 값)
-        ApplyFieldsToLocalParams();
-
         int stride = _source.PixelWidth * 4;
         byte[] pixels = new byte[stride * _source.PixelHeight];
         _source.CopyPixels(pixels, stride, 0);
@@ -338,7 +233,6 @@ public partial class MainWindow : Window
         Faspect.Text = r.AspectRatio.ToString("F2");
         Ftype.Text = r.DefectTypeName;
 
-        // 추가된 상세 항목
         FDefectCode.Text = ((int)r.DefectType).ToString();
         FIsDark.Text = r.IsDark ? "TRUE" : "FALSE";
         FIsLinear.Text = r.IsLinear ? "TRUE" : "FALSE";
@@ -352,19 +246,8 @@ public partial class MainWindow : Window
 
         BuildLogicTree(r);
 
-        if (_source != null)
-        {
-            try
-            {
-                int cx = Math.Max(0, r.X);
-                int cy = Math.Max(0, r.Y);
-                int cw = Math.Max(1, Math.Min(r.Width, _source.PixelWidth - cx));
-                int ch = Math.Max(1, Math.Min(r.Height, _source.PixelHeight - cy));
-                var rect = new Int32Rect(cx, cy, cw, ch);
-                var cb = new CroppedBitmap(_source, rect);
-            }
-            catch { }
-        }
+        // ROI 오버레이 그리기
+        DrawSelectedROIOnImage(r);
     }
 
     private void BuildLogicTree(DefectResult r)
@@ -420,7 +303,7 @@ public partial class MainWindow : Window
             else
             {
                 var a = AddCondition(nodeLineW, "Value(라인) < WHITE_PEAK", r.PeakMax, r.PeakMax < _D_WHITE_LINE_PEAK);
-                AddResult(a, r.PeakMax < _D_WHITE_LINE_PEAK ? "라인 / 미세긁힘(라인)" : "미세긁힘");
+                AddResult(a, r.PeakMax < _D_WHITE_LINE_PEAK ? "라인 / 미세긁힘(라인)" : "미세 긁힘");
             }
         }
 
@@ -446,62 +329,214 @@ public partial class MainWindow : Window
     private static extern int InspectImage(IntPtr image, int width, int height, int stride, int threshold,
         [Out] DefectResultNative[] results, int maxResults);
 
-    private void ApplyParams_Click(object sender, RoutedEventArgs e)
+    // 파라미터 다이얼로그 열기
+    private void OpenParamsDialog_Click(object sender, RoutedEventArgs e)
     {
-        // UI -> 내부값 반영, JSON 저장
-        ApplyFieldsToLocalParams();
-        try
+        var dlg = new ParamDialog(
+            _D_FORM_MIN_AREA_RATIO,
+            _D_ROUNDNESS,
+            _D_DARK_AREA_PERCENT,
+            _D_LINEAR_BASE_BRIGHT,
+            _D_LINE_ANGLE_LOW,
+            _D_LINE_ANGLE_HIGH,
+            _D_WHITE_PEAK_IF,
+            _D_WHITE_PEAK_ELSEIF,
+            _D_WHITE_RATIO,
+            _D_WHITE_LINE_PEAK,
+            _D_LINEARITY_RATIO,
+            _AREA_MIN,
+            _NDIL_CNT)
         {
-            SaveParamsToJson();
-            if (DefectList.SelectedIndex >= 0 && DefectList.SelectedIndex < _results.Count)
+            Owner = this
+        };
+
+        if (dlg.ShowDialog() == true)
+        {
+            _D_FORM_MIN_AREA_RATIO = dlg.D_FORM_MIN_AREA_RATIO;
+            _D_ROUNDNESS = dlg.D_ROUNDNESS;
+            _D_DARK_AREA_PERCENT = dlg.D_DARK_AREA_PERCENT;
+            _D_LINEAR_BASE_BRIGHT = dlg.D_LINEAR_BASE_BRIGHT;
+            _D_LINE_ANGLE_LOW = dlg.D_LINE_ANGLE_LOW;
+            _D_LINE_ANGLE_HIGH = dlg.D_LINE_ANGLE_HIGH;
+            _D_WHITE_PEAK_IF = dlg.D_WHITE_PEAK_IF;
+            _D_WHITE_PEAK_ELSEIF = dlg.D_WHITE_PEAK_ELSEIF;
+            _D_WHITE_RATIO = dlg.D_WHITE_RATIO;
+            _D_WHITE_LINE_PEAK = dlg.D_WHITE_LINE_PEAK;
+            _D_LINEARITY_RATIO = dlg.D_LINEARITY_RATIO;
+            _AREA_MIN = dlg.AREA_MIN;
+            _NDIL_CNT = dlg.NDIL_CNT;
+
+            try
             {
-                DrawLogicDiagramInCanvas(LogicCanvas, _results[DefectList.SelectedIndex]);
+                SaveParamsToJson();
+                StatusText.Text = "파라미터 저장됨";
+                if (DefectList.SelectedIndex >= 0 && DefectList.SelectedIndex < _results.Count)
+                    DrawLogicDiagramInCanvas(LogicCanvas, _results[DefectList.SelectedIndex]);
             }
-            MessageBox.Show("파라미터를 JSON에 저장했습니다.");
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"파라미터 저장 실패: {ex.Message}");
+            catch (Exception ex)
+            {
+                MessageBox.Show($"파라미터 저장 실패: {ex.Message}");
+            }
         }
     }
 
-    private void LoadParamsFromNative_Click(object sender, RoutedEventArgs e)
+    private void Crop_Show_Click(object sender, RoutedEventArgs e)
     {
-        // 버튼 명은 그대로 유지했으나 내부는 JSON 로드
-        try
-        {
-            LoadParamsFromJson();
-            FillParameterControlsWithFields();
-            MessageBox.Show("JSON에서 파라미터를 불러왔습니다.");
-            if (DefectList.SelectedIndex >= 0 && DefectList.SelectedIndex < _results.Count)
-                DrawLogicDiagramInCanvas(LogicCanvas, _results[DefectList.SelectedIndex]);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"파라미터 불러오기 실패: {ex.Message}");
-        }
+        int i = DefectList.SelectedIndex;
+        if (i < 0 || i >= _results.Count) { MessageBox.Show("먼저 불량을 선택하세요."); return; }
+        if (_source == null) { MessageBox.Show("이미지를 먼저 열어주세요."); return; }
+
+        var r = _results[i];
+        int cx = Math.Max(0, r.X);
+        int cy = Math.Max(0, r.Y);
+        int cw = Math.Max(1, Math.Min(r.Width, _source.PixelWidth - cx));
+        int ch = Math.Max(1, Math.Min(r.Height, _source.PixelHeight - cy));
+
+        var rect = new Int32Rect(cx, cy, cw, ch);
+        var cb = new CroppedBitmap(_source, rect);
+
+        // 기존 Crop 창 제거 — 대신 우측 CropPreview에 할당
+        CropPreview.Source = cb;
+
+        // 원본 이미지 위에 ROI 그리기
+        DrawImageROIOnOverlay(cx, cy, cw, ch);
+
     }
 
-    private void ResetParams_Click(object sender, RoutedEventArgs e)
+    private void DrawSelectedROIOnImage(DefectResult r)
     {
-        // 기본값으로 리셋 (UI 반영, JSON에 저장은 선택적)
-        _D_FORM_MIN_AREA_RATIO = 0.25;
-        _D_ROUNDNESS = 0.60;
-        _D_DARK_AREA_PERCENT = 0.05;
-        _D_LINEAR_BASE_BRIGHT = 40.0;
-        _D_LINE_ANGLE_LOW = 10.0;
-        _D_LINE_ANGLE_HIGH = 90.0;
-        _D_WHITE_PEAK_IF = 60.0;
-        _D_WHITE_PEAK_ELSEIF = 40.0;
-        _D_WHITE_RATIO = 1.50;
-        _D_WHITE_LINE_PEAK = 50.0;
-        _D_LINEARITY_RATIO = 3.0;
-        _AREA_MIN = 4;
-        _NDIL_CNT = 2;
-        FillParameterControlsWithFields();
+        if (_source == null) { ClearImageOverlay(); CropPreview.Source = null; return; }
+
+        int cx = Math.Max(0, r.X);
+        int cy = Math.Max(0, r.Y);
+        int cw = Math.Max(1, Math.Min(r.Width, _source.PixelWidth - cx));
+        int ch = Math.Max(1, Math.Min(r.Height, _source.PixelHeight - cy));
+
+        DrawImageROIOnOverlay(cx, cy, cw, ch);
+        // Crop preview 자동 표시
+        var rect = new Int32Rect(cx, cy, cw, ch);
+        try { CropPreview.Source = new CroppedBitmap(_source, rect); } catch { CropPreview.Source = null; }
     }
 
-    // 다이어그램 그리기 함수는 기존 로직 유지 (필드값 사용)
+   
+    private void ClearImageOverlay()
+    {
+        ImageOverlayCanvas.Children.Clear();
+        CropPreview.Source = null;
+    }
+
+    private void DrawImageROIOnOverlay(int imgX, int imgY, int imgW, int imgH)
+    {
+        // 기존 오버레이 초기화
+        ImageOverlayCanvas.Children.Clear();
+        if (_source == null) return;
+
+        // 이미지 원본 픽셀 크기
+        double imgPixelW = _source.PixelWidth;
+        double imgPixelH = _source.PixelHeight;
+
+        // Image 컨트롤의 표시 영역 크기 (Stretch=Uniform 기준)
+        double controlW = ImageView.ActualWidth;
+        double controlH = ImageView.ActualHeight;
+        if (controlW <= 0 || controlH <= 0) return;
+
+        double scale = Math.Min(controlW / imgPixelW, controlH / imgPixelH);
+        double dispW = imgPixelW * scale;
+        double dispH = imgPixelH * scale;
+        double offsetX = (controlW - dispW) / 2.0;
+        double offsetY = (controlH - dispH) / 2.0;
+
+        // ROI를 표시할 좌표 변환
+        double left = offsetX + imgX * scale;
+        double top = offsetY + imgY * scale;
+        double width = Math.Max(1.0, imgW * scale);
+        double height = Math.Max(1.0, imgH * scale);
+
+        // 화면 밖으로 벗어나면 클램프
+        if (left + width < 0 || top + height < 0 || left > controlW || top > controlH) return;
+
+        // ROI 사각형 그리기 (레이블 없음)
+        var rect = new Rectangle
+        {
+            Width = width,
+            Height = height,
+            Stroke = new SolidColorBrush(Color.FromArgb(220, 220, 20, 20)),
+            StrokeThickness = 2,
+            Fill = new SolidColorBrush(Color.FromArgb(32, 220, 20, 20)),
+            RadiusX = 2,
+            RadiusY = 2,
+            IsHitTestVisible = false
+        };
+        Canvas.SetLeft(rect, left);
+        Canvas.SetTop(rect, top);
+        ImageOverlayCanvas.Children.Add(rect);
+    }
+
+    // JSON 모델
+    private class InspectParamsJson
+    {
+        public double D_FORM_MIN_AREA_RATIO { get; set; }
+        public double D_ROUNDNESS { get; set; }
+        public double D_DARK_AREA_PERCENT { get; set; }
+        public double D_LINEAR_BASE_BRIGHT { get; set; }
+        public double D_LINE_ANGLE_LOW { get; set; }
+        public double D_LINE_ANGLE_HIGH { get; set; }
+        public double D_WHITE_PEAK_IF { get; set; }
+        public double D_WHITE_PEAK_ELSEIF { get; set; }
+        public double D_WHITE_RATIO { get; set; }
+        public double D_WHITE_LINE_PEAK { get; set; }
+        public double D_LINEARITY_RATIO { get; set; }
+        public int AREA_MIN { get; set; }
+        public int NDIL_CNT { get; set; }
+    }
+
+    private void SaveParamsToJson()
+    {
+        var p = new InspectParamsJson
+        {
+            D_FORM_MIN_AREA_RATIO = _D_FORM_MIN_AREA_RATIO,
+            D_ROUNDNESS = _D_ROUNDNESS,
+            D_DARK_AREA_PERCENT = _D_DARK_AREA_PERCENT,
+            D_LINEAR_BASE_BRIGHT = _D_LINEAR_BASE_BRIGHT,
+            D_LINE_ANGLE_LOW = _D_LINE_ANGLE_LOW,
+            D_LINE_ANGLE_HIGH = _D_LINE_ANGLE_HIGH,
+            D_WHITE_PEAK_IF = _D_WHITE_PEAK_IF,
+            D_WHITE_PEAK_ELSEIF = _D_WHITE_PEAK_ELSEIF,
+            D_WHITE_RATIO = _D_WHITE_RATIO,
+            D_WHITE_LINE_PEAK = _D_WHITE_LINE_PEAK,
+            D_LINEARITY_RATIO = _D_LINEARITY_RATIO,
+            AREA_MIN = _AREA_MIN,
+            NDIL_CNT = _NDIL_CNT
+        };
+
+        var opts = new JsonSerializerOptions { WriteIndented = true };
+        string json = JsonSerializer.Serialize(p, opts);
+        File.WriteAllText(_paramsFilePath, json);
+    }
+
+    private void LoadParamsFromJson()
+    {
+        if (!File.Exists(_paramsFilePath)) return;
+
+        string json = File.ReadAllText(_paramsFilePath);
+        var p = JsonSerializer.Deserialize<InspectParamsJson>(json);
+        if (p == null) return;
+
+        _D_FORM_MIN_AREA_RATIO = p.D_FORM_MIN_AREA_RATIO;
+        _D_ROUNDNESS = p.D_ROUNDNESS;
+        _D_DARK_AREA_PERCENT = p.D_DARK_AREA_PERCENT;
+        _D_LINEAR_BASE_BRIGHT = p.D_LINEAR_BASE_BRIGHT;
+        _D_LINE_ANGLE_LOW = p.D_LINE_ANGLE_LOW;
+        _D_LINE_ANGLE_HIGH = p.D_LINE_ANGLE_HIGH;
+        _D_WHITE_PEAK_IF = p.D_WHITE_PEAK_IF;
+        _D_WHITE_PEAK_ELSEIF = p.D_WHITE_PEAK_ELSEIF;
+        _D_WHITE_RATIO = p.D_WHITE_RATIO;
+        _D_WHITE_LINE_PEAK = p.D_WHITE_LINE_PEAK;
+        _D_LINEARITY_RATIO = p.D_LINEARITY_RATIO;
+        _AREA_MIN = p.AREA_MIN;
+        _NDIL_CNT = p.NDIL_CNT;
+    }
+
     private void DrawLogicDiagramInCanvas(Canvas canvas, DefectResult r)
     {
         if (canvas == null) return;
@@ -556,7 +591,7 @@ public partial class MainWindow : Window
         (30, "Value(라인) < WHITE_PEAK",              780, 800, 190, 56),
         (31, "라인",                                  680, 1000, 120, 32),
         (32, "미세긁힘",                              920, 1000, 120, 32),
-    };
+};
 
         var nodeMap = new Dictionary<int, (int id, string text, double x, double y, double w, double h)>();
         foreach (var n in nodes) nodeMap[n.id] = n;
@@ -649,23 +684,43 @@ public partial class MainWindow : Window
 
         var conditionNodeIds = new HashSet<int> { 0, 1, 2, 3, 4, 5, 9, 10, 20, 21, 29, 22, 23, 24 };
 
+        // 간단한 실제 값 툴팁 생성
+        string GetActualText(int id)
+        {
+            return id switch
+            {
+                3 => $"AreaRatio={r.AreaRatio:F3}",
+                4 => $"Circularity={r.Circularity:F3}",
+                5 => $"Area%={r.AreaObjPercent:P3}",
+                6 => $"Area={r.Area:F0}",
+                9 => $"PeakMax={r.PeakMax:F1}",
+                10 => $"Angle={r.AngleDeg:F1}",
+                22 or 23 => $"PeakMax={r.PeakMax:F1}",
+                24 => $"RatioMopol={r.RatioMopol:F3}",
+                _ => string.Empty
+            };
+        }
+
+        // 화살표 그리기 (엘보우) — 색/두께를 경로 채택 여부에 따라 조정
         void DrawElbowArrow(
             (int id, string text, double x, double y, double w, double h) a,
             (int id, string text, double x, double y, double w, double h) b,
             string? label, double exitOffsetX = 0, double midYRatio = 0.5, bool forceGray = false)
         {
-            Brush arrowBrush; double thickness;
+            Brush arrowBrush;
+            double thickness;
+            PenLineCap cap = PenLineCap.Round;
 
             if (forceGray)
             {
-                arrowBrush = Brushes.Gray;
-                thickness = 1.2;
+                arrowBrush = Brushes.LightGray;
+                thickness = 1.0;
             }
             else
             {
                 bool taken = edgeTaken.TryGetValue((a.id, b.id), out var takenVal) && takenVal;
-                if (taken) { arrowBrush = Brushes.Green; thickness = 2.5; }
-                else { arrowBrush = Brushes.Red; thickness = 1.2; }
+                if (taken) { arrowBrush = Brushes.SeaGreen; thickness = 2.6; }
+                else { arrowBrush = Brushes.LightSlateGray; thickness = 1.0; }
             }
 
             double x1 = a.x + a.w / 2 + exitOffsetX;
@@ -676,9 +731,28 @@ public partial class MainWindow : Window
 
             var pts = new[] { new Point(x1, y1), new Point(x1, midY), new Point(x2, midY), new Point(x2, y2 - 8) };
             for (int i = 0; i < pts.Length - 1; i++)
-                canvas.Children.Add(new Line { X1 = pts[i].X, Y1 = pts[i].Y, X2 = pts[i + 1].X, Y2 = pts[i + 1].Y, Stroke = arrowBrush, StrokeThickness = thickness });
+            {
+                var line = new Line
+                {
+                    X1 = pts[i].X,
+                    Y1 = pts[i].Y,
+                    X2 = pts[i + 1].X,
+                    Y2 = pts[i + 1].Y,
+                    Stroke = arrowBrush,
+                    StrokeThickness = thickness,
+                    StrokeStartLineCap = cap,
+                    StrokeEndLineCap = cap
+                };
+                canvas.Children.Add(line);
+            }
 
-            var poly = new Polygon { Points = new PointCollection { new Point(x2 - 5, y2 - 8), new Point(x2 + 5, y2 - 8), new Point(x2, y2) }, Fill = arrowBrush };
+            // 화살촉: 작게 하고 약간 투명도 적용
+            var poly = new Polygon
+            {
+                Points = new PointCollection { new Point(x2 - 5, y2 - 8), new Point(x2 + 5, y2 - 8), new Point(x2, y2) },
+                Fill = arrowBrush,
+                Opacity = 0.95
+            };
             canvas.Children.Add(poly);
 
             if (!string.IsNullOrEmpty(label))
@@ -687,42 +761,90 @@ public partial class MainWindow : Window
                 {
                     Background = Brushes.White,
                     BorderBrush = arrowBrush,
-                    BorderThickness = new Thickness(1),
-                    CornerRadius = new CornerRadius(2),
-                    Padding = new Thickness(3, 1, 3, 1),
-                    Child = new TextBlock { Text = label, FontSize = 10, FontWeight = FontWeights.Bold, Foreground = arrowBrush }
+                    BorderThickness = new Thickness(0.8),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(4, 1, 4, 1),
+                    Child = new TextBlock { Text = label, FontSize = 10, FontWeight = FontWeights.SemiBold, Foreground = arrowBrush }
                 };
-                Canvas.SetLeft(labelBorder, x2 - 18);
-                Canvas.SetTop(labelBorder, midY - 10);
+                Canvas.SetLeft(labelBorder, x2 - 20);
+                Canvas.SetTop(labelBorder, midY - 12);
                 canvas.Children.Add(labelBorder);
             }
         }
 
+        // 노드 그리기: 조건노드는 true이면 연한 녹색, false이면 연한 빨강(비활성은 WhiteSmoke)
         void DrawNode((int id, string text, double x, double y, double w, double h) node)
         {
             bool isCondition = conditionNodeIds.Contains(node.id);
             bool onPath = nodeOnPath.TryGetValue(node.id, out var onPathVal) && onPathVal;
             bool isResultHighlighted = resultHighlight.Contains(node.id);
 
-            Brush fill = isCondition ? (onPath ? Brushes.LightGreen : Brushes.WhiteSmoke) : (isResultHighlighted ? Brushes.DimGray : Brushes.White);
-            Brush border = isCondition ? Brushes.Black : (isResultHighlighted ? Brushes.DarkGreen : Brushes.Gray);
+            Brush fill;
+            Brush border;
+            if (isResultHighlighted)
+            {
+                fill = new LinearGradientBrush(Color.FromRgb(40, 90, 100), Color.FromRgb(60, 120, 130), 90);
+                border = Brushes.Black;
+            }
+            else if (isCondition)
+            {
+                if (onPath)
+                {
+                    fill = new LinearGradientBrush(Color.FromRgb(220, 255, 220), Color.FromRgb(190, 240, 190), 90);
+                    border = Brushes.SeaGreen;
+                }
+                else
+                {
+                    fill = new LinearGradientBrush(Color.FromRgb(245, 245, 245), Color.FromRgb(235, 235, 235), 90);
+                    border = Brushes.Gray;
+                }
+            }
+            else
+            {
+                fill = Brushes.WhiteSmoke;
+                border = Brushes.Gray;
+            }
 
-            var rect = new Rectangle { Width = node.w, Height = node.h, Stroke = border, StrokeThickness = isResultHighlighted ? 2 : 1, RadiusX = 5, RadiusY = 5, Fill = fill };
-            Canvas.SetLeft(rect, node.x); Canvas.SetTop(rect, node.y);
+            var rect = new Rectangle
+            {
+                Width = node.w,
+                Height = node.h,
+                Stroke = border,
+                StrokeThickness = isResultHighlighted ? 2.4 : 1.2,
+                RadiusX = 6,
+                RadiusY = 6,
+                Fill = fill
+            };
+
+            if (isResultHighlighted)
+                rect.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 10, Opacity = 0.55, ShadowDepth = 3 };
+
+            Canvas.SetLeft(rect, node.x);
+            Canvas.SetTop(rect, node.y);
             canvas.Children.Add(rect);
 
             var tb = new TextBlock
             {
                 Text = node.text,
-                Width = node.w - 8,
+                Width = node.w - 12,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center,
                 Foreground = isResultHighlighted ? Brushes.White : Brushes.Black,
                 FontSize = 11,
-                VerticalAlignment = VerticalAlignment.Center
+                FontWeight = isResultHighlighted ? FontWeights.SemiBold : FontWeights.Normal
             };
-            Canvas.SetLeft(tb, node.x + 4); Canvas.SetTop(tb, node.y + node.h / 2 - 14);
+            Canvas.SetLeft(tb, node.x + 6);
+            Canvas.SetTop(tb, node.y + 6);
             canvas.Children.Add(tb);
+
+            // 툴팁: 중요한 실제 값만 보여줌
+            var actual = GetActualText(node.id);
+            if (!string.IsNullOrEmpty(actual))
+            {
+                var tip = new ToolTip { Content = actual };
+                ToolTipService.SetToolTip(rect, tip);
+                ToolTipService.SetToolTip(tb, tip);
+            }
         }
 
         bool TryNode(int id, out (int id, string text, double x, double y, double w, double h) node) => nodeMap.TryGetValue(id, out node);
@@ -732,6 +854,7 @@ public partial class MainWindow : Window
             if (TryNode(a, out var na) && TryNode(b, out var nb)) DrawElbowArrow(na, nb, label, offset, midYRatio, forceGray);
         }
 
+        // 노드 먼저 그림
         foreach (var n in nodes) DrawNode(n);
 
         // ================= 화살표 (라벨 포함) =================
@@ -769,6 +892,29 @@ public partial class MainWindow : Window
         SafeArrow(30, 31, "TRUE");
         SafeArrow(30, 32, "FALSE");
 
+        // Legend (좌상단) — 보기 편하게 간단 범례 추가
+        void DrawLegend()
+        {
+            double lx = 12, ly = 12, rectW = 16, rectH = 12, gap = 6;
+            var trueRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(220, 255, 220), Color.FromRgb(190, 240, 190), 90), Stroke = Brushes.SeaGreen, StrokeThickness = 1 };
+            Canvas.SetLeft(trueRect, lx); Canvas.SetTop(trueRect, ly); canvas.Children.Add(trueRect);
+            var trueTxt = new TextBlock { Text = "활성 경로 / TRUE", FontSize = 11 };
+            Canvas.SetLeft(trueTxt, lx + rectW + gap); Canvas.SetTop(trueTxt, ly - 2); canvas.Children.Add(trueTxt);
+
+            var falseRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(245,245,245), Color.FromRgb(235,235,235), 90), Stroke = Brushes.Gray, StrokeThickness = 1 };
+            Canvas.SetLeft(falseRect, lx); Canvas.SetTop(falseRect, ly + rectH + gap); canvas.Children.Add(falseRect);
+            var falseTxt = new TextBlock { Text = "비활성 / FALSE", FontSize = 11 };
+            Canvas.SetLeft(falseTxt, lx + rectW + gap); Canvas.SetTop(falseTxt, ly + rectH + gap - 2); canvas.Children.Add(falseTxt);
+
+            var resRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(45,75,85), Color.FromRgb(60,100,110), 90), Stroke = Brushes.Black, StrokeThickness = 1 };
+            Canvas.SetLeft(resRect, lx); Canvas.SetTop(resRect, ly + 2*(rectH + gap)); canvas.Children.Add(resRect);
+            var resTxt = new TextBlock { Text = "판정 결과 강조", FontSize = 11, Foreground = Brushes.Black };
+            Canvas.SetLeft(resTxt, lx + rectW + gap); Canvas.SetTop(resTxt, ly + 2*(rectH + gap) - 2); canvas.Children.Add(resTxt);
+        }
+
+        DrawLegend();
+
+        // 캔버스 크기 재조정
         double maxX = 0, maxY = 0;
         foreach (var n in nodes) { maxX = Math.Max(maxX, n.x + n.w + 20); maxY = Math.Max(maxY, n.y + n.h + 20); }
         canvas.Width = Math.Max(canvas.Width, maxX);
