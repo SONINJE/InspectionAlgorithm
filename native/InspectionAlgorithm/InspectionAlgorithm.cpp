@@ -64,7 +64,7 @@ struct BlobFeature
     int    x, y, w, h;
     double area;
     double areaRatio;      // B-면적비율 (blob면적 / bbox면적)
-    double circularity;    // 진원도 (Compactness)
+    double circularity;    // 원형도 (Compactness)
     double angleDeg;       // 기울기
     double peakMin;        // 최소 편차 피크
     double peakMax;        // 최대 편차 피크

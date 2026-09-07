@@ -14,7 +14,7 @@
 
                 <UniformGrid Columns="2" Rows="13" Margin="0,0,0,6">
                     <TextBlock Text="Dark_면적비율" VerticalAlignment="Center" Margin="4"/> <TextBox x:Name="Txt_FormMinAreaRatio" Margin="4"/>
-                    <TextBlock Text="Dark_진원도" VerticalAlignment="Center" Margin="4"/> <TextBox x:Name="Txt_Roundness" Margin="4"/>
+                    <TextBlock Text="Dark_원형도" VerticalAlignment="Center" Margin="4"/> <TextBox x:Name="Txt_Roundness" Margin="4"/>
                     <TextBlock Text="Dark_면적비율" VerticalAlignment="Center" Margin="4"/> <TextBox x:Name="Txt_DarkAreaPercent" Margin="4"/>
                     <TextBlock Text="Dark_최소밝기" VerticalAlignment="Center" Margin="4"/> <TextBox x:Name="Txt_LinearBaseBright" Margin="4"/>
                     <TextBlock Text="Dark_기울기 하한" VerticalAlignment="Center" Margin="4"/> <TextBox x:Name="Txt_LineAngleLow" Margin="4"/>

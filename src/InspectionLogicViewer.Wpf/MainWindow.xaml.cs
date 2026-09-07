@@ -43,8 +43,12 @@ public partial class MainWindow : Window
     private double _D_WHITE_RATIO = 1.50;
     private double _D_WHITE_LINE_PEAK = 50.0;
     private double _D_LINEARITY_RATIO = 3.0;
-    private int    _AREA_MIN = 4;
-    private int    _NDIL_CNT = 2;
+    private int _AREA_MIN = 4;
+    private int _NDIL_CNT = 2;
+
+    // 여유값(Margin) 표시 임계치
+    private const double MarginDangerPercent = 5.0;   // 5% 미만: 위험(경계값 매우 근접)
+    private const double MarginCautionPercent = 15.0; // 15% 미만: 주의
 
     private readonly string _paramsFilePath = Path.Combine(AppContext.BaseDirectory, "inspect_params.json");
 
@@ -65,6 +69,7 @@ public partial class MainWindow : Window
         LogicCanvas.MouseLeave += LogicCanvas_MouseLeave;
 
         try { LoadParamsFromJson(); } catch { }
+        UpdateParamSummaryPanel();
 
         // 초기 상태: overlay 캔버스 크기 동기화
         ImageOverlayCanvas.Width = ImageView.ActualWidth;
@@ -250,6 +255,186 @@ public partial class MainWindow : Window
         DrawSelectedROIOnImage(r);
     }
 
+    // ─────────────────────────────────────────────────────────
+    // 여유값(Margin) 계산 및 표시 헬퍼
+    // ─────────────────────────────────────────────────────────
+
+    // 단순 비교(">" 또는 "<")의 여유값 계산
+    // margin: 실제값이 기준선을 넘은 절대량 (+ 면 조건 충족 방향으로 여유, - 면 미달)
+    // marginPercent: 기준값 대비 상대 비율(%)
+    private static (double margin, double marginPercent) ComputeMargin(double actual, double threshold, string op)
+    {
+        double margin = (op == "<" || op == "<=")
+            ? threshold - actual   // 작아야 충족되는 조건
+            : actual - threshold;  // 커야 충족되는 조건
+
+        double basis = Math.Abs(threshold) > 1e-9 ? Math.Abs(threshold)
+                     : Math.Abs(actual) > 1e-9 ? Math.Abs(actual)
+                     : 1.0;
+        double marginPercent = margin / basis * 100.0;
+        return (margin, marginPercent);
+    }
+
+    // 여유 정도에 따른 표시 색상/아이콘
+    private static (Brush color, string icon) GetMarginStyle(double marginPercent)
+    {
+        double abs = Math.Abs(marginPercent);
+        if (abs < MarginDangerPercent) return (Brushes.OrangeRed, "⚠ ");
+        if (abs < MarginCautionPercent) return (Brushes.DarkGoldenrod, "△ ");
+        return (Brushes.SeaGreen, "");
+    }
+
+    // 여유값 텍스트 한 줄 생성 (공통)
+    private static TextBlock BuildMarginLine(double margin, double marginPercent)
+    {
+        var (color, icon) = GetMarginStyle(marginPercent);
+        string sign = margin >= 0 ? "+" : "";
+        return new TextBlock
+        {
+            Text = $"{icon}여유: {sign}{margin:F2}  ({sign}{marginPercent:F1}%)",
+            FontSize = 11,
+            FontWeight = Math.Abs(marginPercent) < MarginCautionPercent ? FontWeights.Bold : FontWeights.Normal,
+            Foreground = color
+        };
+    }
+
+    // ── 파라미터 비교 노드 생성 헬퍼들 ────────────────────────────
+
+    // 단순 비교 (실제값 [연산자] 파라미터값)
+    private static TreeViewItem AddParamCompare(
+        TreeViewItem parent, string title,
+        double actualValue, string actualName,
+        string op,
+        double paramValue, string paramName,
+        bool result, string format = "F3")
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"{actualName} = {actualValue.ToString(format)}   {op}   {paramName} = {paramValue.ToString(format)}",
+            FontSize = 11,
+            Foreground = Brushes.DimGray
+        });
+
+        var (margin, marginPercent) = ComputeMargin(actualValue, paramValue, op);
+        panel.Children.Add(BuildMarginLine(margin, marginPercent));
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = result ? "→ TRUE" : "→ FALSE",
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            Foreground = result ? Brushes.DarkGreen : Brushes.IndianRed
+        });
+
+        var item = new TreeViewItem { Header = panel, IsExpanded = true };
+        parent.Items.Add(item);
+        return item;
+    }
+
+    // 범위 비교 (실제값 < 하한 또는 실제값 > 상한) — 각도 조건용
+    private static TreeViewItem AddRangeCompare(
+        TreeViewItem parent, string title,
+        double actualValue, string actualName,
+        double lowParam, string lowName,
+        double highParam, string highName,
+        bool result, string format = "F1")
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"{actualName} = {actualValue.ToString(format)}   " +
+                   $"(< {lowName}={lowParam.ToString(format)}  또는  > {highName}={highParam.ToString(format)})",
+            FontSize = 11,
+            Foreground = Brushes.DimGray
+        });
+
+        // OR 조건: 하한/상한 각각에서 실제값이 얼마나 벗어났는지(+) / 벗어나려면 얼마나 남았는지(-)
+        double marginLow = (actualValue < lowParam)
+            ? lowParam - actualValue
+            : -(actualValue - lowParam);
+
+        double marginHigh = (actualValue > highParam)
+            ? actualValue - highParam
+            : -(highParam - actualValue);
+
+        // 두 경계 중 조건에 더 크게 기여한(가까운) 쪽을 대표 여유값으로 사용
+        double margin = Math.Max(marginLow, marginHigh);
+        double basis = Math.Abs(actualValue) > 1e-9 ? Math.Abs(actualValue) : 1.0;
+        double marginPercent = margin / basis * 100.0;
+
+        panel.Children.Add(BuildMarginLine(margin, marginPercent));
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = result ? "→ TRUE" : "→ FALSE",
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            Foreground = result ? Brushes.DarkGreen : Brushes.IndianRed
+        });
+
+        var item = new TreeViewItem { Header = panel, IsExpanded = true };
+        parent.Items.Add(item);
+        return item;
+    }
+
+    // 구간(Between) 비교 (하한 < 실제값 <= 상한) — WHITE_PEAK ElseIf 조건용
+    private static TreeViewItem AddBetweenCompare(
+        TreeViewItem parent, string title,
+        double actualValue, string actualName,
+        double lowParam, string lowName,
+        double highParam, string highName,
+        bool result, string format = "F1")
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"{lowName}={lowParam.ToString(format)}  <  {actualName}={actualValue.ToString(format)}  <=  {highName}={highParam.ToString(format)}",
+            FontSize = 11,
+            Foreground = Brushes.DimGray
+        });
+
+        // AND(구간) 조건: 실제값이 구간 안쪽으로 얼마나 여유 있는지 → 두 경계까지 거리 중 더 짧은(타이트한) 쪽
+        double distToLow = actualValue - lowParam;   // 양수면 하한 통과
+        double distToHigh = highParam - actualValue; // 양수면 상한 통과
+        double margin = Math.Min(distToLow, distToHigh);
+
+        double basis = Math.Abs(actualValue) > 1e-9 ? Math.Abs(actualValue) : 1.0;
+        double marginPercent = margin / basis * 100.0;
+
+        panel.Children.Add(BuildMarginLine(margin, marginPercent));
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = result ? "→ TRUE" : "→ FALSE",
+            FontSize = 11,
+            FontWeight = FontWeights.Bold,
+            Foreground = result ? Brushes.DarkGreen : Brushes.IndianRed
+        });
+
+        var item = new TreeViewItem { Header = panel, IsExpanded = true };
+        parent.Items.Add(item);
+        return item;
+    }
+
     private void BuildLogicTree(DefectResult r)
     {
         LogicTreeView.Items.Clear();
@@ -259,51 +444,120 @@ public partial class MainWindow : Window
         bool isDark = r.IsDark;
         bool isLinear = r.IsLinear;
 
-        var nodeDark = AddCondition(root, "다크성", isDark ? "TRUE" : "FALSE", isDark);
+        var nodeDark = AddCondition(root, "다크성 판정", isDark ? "TRUE" : "FALSE", isDark);
+
         if (isDark)
         {
-            var nodeLine = AddCondition(nodeDark, "라인성", isLinear ? "TRUE" : "FALSE", isLinear);
+            var nodeLine = AddCondition(nodeDark, "라인성 판정", isLinear ? "TRUE" : "FALSE", isLinear);
+
             if (!isLinear)
             {
-                var a = AddCondition(nodeLine, "불량 흑 면적비율 > PARA 형태 판단 최소면", r.AreaRatio, r.AreaRatio > _D_FORM_MIN_AREA_RATIO);
-                var b = AddCondition(a, "불량 진원도 > PARA 흑 진원도", r.Circularity, r.Circularity > _D_ROUNDNESS);
-                var c = AddCondition(b, "불량 면적% > PARA Dark면적%", r.AreaObjPercent, r.AreaObjPercent > _D_DARK_AREA_PERCENT);
-                AddResult(c, "분화구 / 크랙 / WEAK_POINT_D");
+                // ── 다크 & 비선형: 분화구 / 크랙 / 흑 약불량(WEAK_POINT_D) ──
+                bool condFormArea = r.AreaRatio > _D_FORM_MIN_AREA_RATIO;
+                var a = AddParamCompare(nodeLine, "형태 판단: 면적비율이 최소 기준보다 큰가",
+                    r.AreaRatio, "AreaRatio", ">", _D_FORM_MIN_AREA_RATIO, "D_FORM_MIN_AREA_RATIO", condFormArea);
+
+                if (!condFormArea)
+                {
+                    AddResult(a, "흑 약불량 (WEAK_POINT_D)");
+                }
+                else
+                {
+                    bool condRoundness = r.Circularity > _D_ROUNDNESS;
+                    var b = AddParamCompare(a, "형태 판단: 원형도가 흑 원형성 기준보다 큰가",
+                        r.Circularity, "Circularity", ">", _D_ROUNDNESS, "D_ROUNDNESS", condRoundness);
+
+                    if (!condRoundness)
+                    {
+                        AddResult(b, "크랙 (CRACK)");
+                    }
+                    else
+                    {
+                        bool condDarkAreaPct = r.AreaObjPercent > _D_DARK_AREA_PERCENT;
+                        var c = AddParamCompare(b, "면적 비중: 결함 면적%가 Dark 면적% 기준보다 큰가",
+                            r.AreaObjPercent, "AreaObjPercent", ">", _D_DARK_AREA_PERCENT, "D_DARK_AREA_PERCENT", condDarkAreaPct, "F6");
+
+                        if (condDarkAreaPct)
+                            AddResult(c, "분화구 (CRATER)");
+                        else
+                            AddResult(c, "크랙 (CRACK)");
+                    }
+                }
             }
             else
             {
-                var a = AddCondition(nodeLine, "다크 피크치 > PARA 선형 불량 기준밝기", r.PeakMax, r.PeakMax > _D_LINEAR_BASE_BRIGHT);
-                var b = AddCondition(a, "불량각도 < PARA 10도 or >90도", r.AngleDeg, r.AngleDeg < _D_LINE_ANGLE_LOW || r.AngleDeg > _D_LINE_ANGLE_HIGH);
-                AddResult(b, "스크래치 / 크랙 / PARA 흑 약불량");
+                // ── 다크 & 선형: 스크래치 / 크랙(PARTICLE) / 흑 약불량(BLACK_WEAK) ──
+                bool condDarkPeak = r.PeakMax > _D_LINEAR_BASE_BRIGHT;
+                var a = AddParamCompare(nodeLine, "밝기 판단: 다크 피크치가 선형 불량 기준밝기보다 큰가",
+                    r.PeakMax, "PeakMax", ">", _D_LINEAR_BASE_BRIGHT, "D_LINEAR_BASE_BRIGHT", condDarkPeak, "F1");
+
+                if (!condDarkPeak)
+                {
+                    AddResult(a, "흑 약불량 (BLACK_WEAK)");
+                }
+                else
+                {
+                    bool condAngle = r.AngleDeg < _D_LINE_ANGLE_LOW || r.AngleDeg > _D_LINE_ANGLE_HIGH;
+                    var b = AddRangeCompare(a, "각도 판단: 불량 각도가 정상 범위를 벗어났는가",
+                        r.AngleDeg, "AngleDeg", _D_LINE_ANGLE_LOW, "D_LINE_ANGLE_LOW", _D_LINE_ANGLE_HIGH, "D_LINE_ANGLE_HIGH", condAngle);
+
+                    if (condAngle)
+                        AddResult(b, "스크래치 (SCRATCH)");
+                    else
+                        AddResult(b, "크랙 (PARTICLE)");
+                }
             }
         }
         else
         {
-            var nodeWhite = AddCondition(root, "화이트성", "TRUE", true);
-            var nodeLineW = AddCondition(nodeWhite, "라인성", isLinear ? "TRUE" : "FALSE", isLinear);
+            var nodeWhite = AddCondition(root, "화이트성 판정", "TRUE", true);
+            var nodeLineW = AddCondition(nodeWhite, "라인성 판정", isLinear ? "TRUE" : "FALSE", isLinear);
 
             if (!isLinear)
             {
-                var ifNode = AddCondition(nodeLineW, "PARA 불량 PEAK > WHITE_PEAK (IF)", r.PeakMax, r.PeakMax > _D_WHITE_PEAK_IF);
-                if (r.PeakMax > _D_WHITE_PEAK_IF) AddResult(ifNode, "핀홀");
+                // ── 화이트 & 비선형: 핀홀 / 미세긁힘 / 찍힘 / 화이트 약불량 ──
+                bool condIf = r.PeakMax > _D_WHITE_PEAK_IF;
+                var ifNode = AddParamCompare(nodeLineW, "PEAK 판단(1단계): 불량 피크치가 IF 기준값보다 큰가",
+                    r.PeakMax, "PeakMax", ">", _D_WHITE_PEAK_IF, "D_WHITE_PEAK_IF", condIf, "F1");
 
-                var elifNode = AddCondition(nodeLineW, "PARA 불량 PEAK > WHITE_PEAK (Else if)", r.PeakMax, r.PeakMax > _D_WHITE_PEAK_ELSEIF && r.PeakMax <= _D_WHITE_PEAK_IF);
-                if (r.PeakMax > _D_WHITE_PEAK_ELSEIF && r.PeakMax <= _D_WHITE_PEAK_IF)
+                if (condIf)
                 {
-                    var ratioNode = AddCondition(elifNode, "dRatio_mopol > Ratio<White>", r.RatioMopol, r.RatioMopol > _D_WHITE_RATIO);
-                    AddResult(ratioNode, r.RatioMopol > _D_WHITE_RATIO ? "미세긁힘" : "찍힘");
+                    AddResult(ifNode, "핀홀 (PINHOLE)");
                 }
-
-                if (r.PeakMax <= _D_WHITE_PEAK_ELSEIF)
+                else
                 {
-                    var elseNode = AddCondition(nodeLineW, "화이트 약불량 (Else)", r.PeakMax, true);
-                    AddResult(elseNode, "화이트 약불량");
+                    bool condElseIf = r.PeakMax > _D_WHITE_PEAK_ELSEIF;
+                    var elifNode = AddParamCompare(ifNode, "PEAK 판단(2단계): 불량 피크치가 ELSEIF 기준값보다 큰가",
+                        r.PeakMax, "PeakMax", ">", _D_WHITE_PEAK_ELSEIF, "D_WHITE_PEAK_ELSEIF", condElseIf, "F1");
+
+                    if (condElseIf)
+                    {
+                        bool condRatio = r.RatioMopol > _D_WHITE_RATIO;
+                        var ratioNode = AddParamCompare(elifNode, "모폴로지 판단: 비율값이 화이트 비율 기준보다 큰가",
+                            r.RatioMopol, "RatioMopol", ">", _D_WHITE_RATIO, "D_WHITE_RATIO", condRatio, "F3");
+
+                        if (condRatio)
+                            AddResult(ratioNode, "미세긁힘 (MICRO_SCRATCH)");
+                        else
+                            AddResult(ratioNode, "찍힘 (DENT)");
+                    }
+                    else
+                    {
+                        AddResult(elifNode, "화이트 약불량 (WHITE_WEAK)");
+                    }
                 }
             }
             else
             {
-                var a = AddCondition(nodeLineW, "Value(라인) < WHITE_PEAK", r.PeakMax, r.PeakMax < _D_WHITE_LINE_PEAK);
-                AddResult(a, r.PeakMax < _D_WHITE_LINE_PEAK ? "라인 / 미세긁힘(라인)" : "미세 긁힘");
+                // ── 화이트 & 선형: 라인 / 미세긁힘(STAIN) ──
+                bool condWhiteLine = r.PeakMax < _D_WHITE_LINE_PEAK;
+                var a = AddParamCompare(nodeLineW, "라인 판단: 불량 피크치가 화이트 라인 기준보다 작은가",
+                    r.PeakMax, "PeakMax", "<", _D_WHITE_LINE_PEAK, "D_WHITE_LINE_PEAK", condWhiteLine, "F1");
+
+                if (condWhiteLine)
+                    AddResult(a, "라인 (LINE)");
+                else
+                    AddResult(a, "미세긁힘 (STAIN)");
             }
         }
 
@@ -328,6 +582,24 @@ public partial class MainWindow : Window
     [DllImport("InspectionAlgorithm.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int InspectImage(IntPtr image, int width, int height, int stride, int threshold,
         [Out] DefectResultNative[] results, int maxResults);
+
+    // 하단 파라미터 요약 패널 갱신
+    private void UpdateParamSummaryPanel()
+    {
+        PText_FormMinAreaRatio.Text = _D_FORM_MIN_AREA_RATIO.ToString("F3");
+        PText_Roundness.Text = _D_ROUNDNESS.ToString("F3");
+        PText_DarkAreaPercent.Text = _D_DARK_AREA_PERCENT.ToString("F3");
+        PText_LinearBaseBright.Text = _D_LINEAR_BASE_BRIGHT.ToString("F1");
+        PText_LineAngleLow.Text = _D_LINE_ANGLE_LOW.ToString("F1");
+        PText_LineAngleHigh.Text = _D_LINE_ANGLE_HIGH.ToString("F1");
+        PText_WhitePeakIf.Text = _D_WHITE_PEAK_IF.ToString("F1");
+        PText_WhitePeakElseIf.Text = _D_WHITE_PEAK_ELSEIF.ToString("F1");
+        PText_WhiteRatio.Text = _D_WHITE_RATIO.ToString("F2");
+        PText_WhiteLinePeak.Text = _D_WHITE_LINE_PEAK.ToString("F1");
+        PText_LinearityRatio.Text = _D_LINEARITY_RATIO.ToString("F1");
+        PText_AreaMin.Text = _AREA_MIN.ToString();
+        PText_NdilCnt.Text = _NDIL_CNT.ToString();
+    }
 
     // 파라미터 다이얼로그 열기
     private void OpenParamsDialog_Click(object sender, RoutedEventArgs e)
@@ -369,6 +641,7 @@ public partial class MainWindow : Window
             try
             {
                 SaveParamsToJson();
+                UpdateParamSummaryPanel();
                 StatusText.Text = "파라미터 저장됨";
                 if (DefectList.SelectedIndex >= 0 && DefectList.SelectedIndex < _results.Count)
                     DrawLogicDiagramInCanvas(LogicCanvas, _results[DefectList.SelectedIndex]);
@@ -418,7 +691,7 @@ public partial class MainWindow : Window
         try { CropPreview.Source = new CroppedBitmap(_source, rect); } catch { CropPreview.Source = null; }
     }
 
-   
+
     private void ClearImageOverlay()
     {
         ImageOverlayCanvas.Children.Clear();
@@ -561,34 +834,34 @@ public partial class MainWindow : Window
 
         // ================= 노드 정의 =================
         var nodes = new List<(int id, string text, double x, double y, double w, double h)> {
-        (0,  "다크성",                                440, 8,   160, 40),
-        (1,  "라인성",                                100, 100, 150, 36),
-        (3,  "불량 흑 면적비율 > \n PARA 형태 판단 최소면", 10,  200, 210, 56),
+        (0,  "흑불량",                                440, 8,   160, 40),
+        (1,  "선형성",                                100, 100, 150, 36),
+        (3,  "불량 면적비율 > Dark_면적비율", 10,  200, 210, 56),
         (8,  "흑 약불량",                             300, 320, 190, 56),
-        (4,  "불량 진원도 > PARA 흑 진원도",           10,  320, 210, 48),
-        (5,  "불량 면적% > PARA Dark면적%",            10, 430, 230, 48),
+        (4,  "불량 원형도 > Dark 원형도",           10,  320, 210, 48),
+        (5,  "불량 면적% > Dark 면적비율",            10, 430, 230, 48),
         (6,  "분화구",                                10,  530, 130, 32),
         (7,  "크랙",                                  320,  530, 130, 32),
 
-        (2,  "라인성",                               780, 100, 150, 36),
-        (9,  "다크 피크치 > \n PARA 선형 불량 기준밝기", 780, 200, 210, 56),
+        (2,  "비선형성",                               780, 100, 150, 36),
+        (9,  "불량 흑 피크치 > \n Dark 최소밝기", 780, 200, 210, 56),
         (12, "흑 약불량",                            780, 310, 130, 32),
-        (10, "불량각도 < PARA 10도 or >90도",         1030, 310, 210, 48),
+        (10, "Dark 기울기 하한 < \n 불량 기울기 \n < 기울기 상한",         1030, 310, 210, 56),
         (11, "스크래치",                              980, 420, 120, 32),
         (13, "크랙",                                  1120, 420, 120, 32),
 
-        (20, "화이트성",                             440, 600, 160, 40),
-        (21, "라인성",                               100, 690, 150, 36),
-        (22, "PARA 핀홀 PEAK > WHITE_PEAK",           10,  790, 190, 56),
-        (23, "PARA 돌출 PEAK > WHITE_PEAK",           220, 790, 190, 56),
+        (20, "백불량",                             440, 600, 160, 40),
+        (21, "선형성",                               100, 690, 150, 36),
+        (22, "White_핀홀 기준값 > 불량 백 피크치",           10,  790, 190, 56),
+        (23, "White_돌출 기준값 > 불량 백 피크치",           220, 790, 190, 56),
         (25, "화이트 약불량",                         440, 790, 150, 40),
         (26, "핀홀",                                  10,  900, 120, 32),
-        (24, "dRatio_mopol > \n Ratio<White>",        220, 900, 190, 48),
+        (24, "모폴로지 연산횟수 > \n Ratio<White>",        220, 900, 190, 48),
         (27, "미세긁힘",                              170, 1000, 120, 32),
         (28, "찍힘",                                  320, 1000, 120, 32),
 
-        (29, "라인성",                                780, 690, 150, 36),
-        (30, "Value(라인) < WHITE_PEAK",              780, 800, 190, 56),
+        (29, "비선형성",                                780, 690, 150, 36),
+        (30, "White_라인 기준값 < 불량 백 피크치",              780, 800, 190, 56),
         (31, "라인",                                  680, 1000, 120, 32),
         (32, "미세긁힘",                              920, 1000, 120, 32),
 };
@@ -901,15 +1174,15 @@ public partial class MainWindow : Window
             var trueTxt = new TextBlock { Text = "활성 경로 / TRUE", FontSize = 11 };
             Canvas.SetLeft(trueTxt, lx + rectW + gap); Canvas.SetTop(trueTxt, ly - 2); canvas.Children.Add(trueTxt);
 
-            var falseRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(245,245,245), Color.FromRgb(235,235,235), 90), Stroke = Brushes.Gray, StrokeThickness = 1 };
+            var falseRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(245, 245, 245), Color.FromRgb(235, 235, 235), 90), Stroke = Brushes.Gray, StrokeThickness = 1 };
             Canvas.SetLeft(falseRect, lx); Canvas.SetTop(falseRect, ly + rectH + gap); canvas.Children.Add(falseRect);
             var falseTxt = new TextBlock { Text = "비활성 / FALSE", FontSize = 11 };
             Canvas.SetLeft(falseTxt, lx + rectW + gap); Canvas.SetTop(falseTxt, ly + rectH + gap - 2); canvas.Children.Add(falseTxt);
 
-            var resRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(45,75,85), Color.FromRgb(60,100,110), 90), Stroke = Brushes.Black, StrokeThickness = 1 };
-            Canvas.SetLeft(resRect, lx); Canvas.SetTop(resRect, ly + 2*(rectH + gap)); canvas.Children.Add(resRect);
+            var resRect = new Rectangle { Width = rectW, Height = rectH, Fill = new LinearGradientBrush(Color.FromRgb(45, 75, 85), Color.FromRgb(60, 100, 110), 90), Stroke = Brushes.Black, StrokeThickness = 1 };
+            Canvas.SetLeft(resRect, lx); Canvas.SetTop(resRect, ly + 2 * (rectH + gap)); canvas.Children.Add(resRect);
             var resTxt = new TextBlock { Text = "판정 결과 강조", FontSize = 11, Foreground = Brushes.Black };
-            Canvas.SetLeft(resTxt, lx + rectW + gap); Canvas.SetTop(resTxt, ly + 2*(rectH + gap) - 2); canvas.Children.Add(resTxt);
+            Canvas.SetLeft(resTxt, lx + rectW + gap); Canvas.SetTop(resTxt, ly + 2 * (rectH + gap) - 2); canvas.Children.Add(resTxt);
         }
 
         DrawLegend();

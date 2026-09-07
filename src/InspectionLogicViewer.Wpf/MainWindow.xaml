@@ -11,15 +11,15 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8" VerticalAlignment="Center" Height="36">
-            <Button Content="이미지 열기" Width="110" Margin="0,0,8,0" Click="OpenImage_Click" Background="#FFF" BorderBrush="#DDD"/>
-            <Button Content="검사" Width="90" Margin="0,0,8,0" Click="Inspect_Click" Background="#FFF" BorderBrush="#DDD"/>
-            <Button Content="이전" Width="80" Margin="0,0,8,0" Click="Previous_Click" Background="#FFF" BorderBrush="#DDD"/>
-            <Button Content="다음" Width="80" Margin="0,0,12,0" Click="Next_Click" Background="#FFF" BorderBrush="#DDD"/>
+            <Button Content="LOAD" Width="110" Margin="0,0,8,0" Click="OpenImage_Click" Background="#FFF" BorderBrush="#DDD"/>
+            <Button Content="INSPECT" Width="90" Margin="0,0,8,0" Click="Inspect_Click" Background="#FFF" BorderBrush="#DDD"/>
+            <Button Content="BACK" Width="80" Margin="0,0,8,0" Click="Previous_Click" Background="#FFF" BorderBrush="#DDD"/>
+            <Button Content="NEXT" Width="80" Margin="0,0,12,0" Click="Next_Click" Background="#FFF" BorderBrush="#DDD"/>
             <TextBlock Text="Threshold" VerticalAlignment="Center" Margin="0,0,6,0"/>
             <TextBox x:Name="ThresholdBox" Text="35" Width="60" Margin="0,0,12,0"/>
 
-            <Button Content="파라미터..." Width="110" Click="OpenParamsDialog_Click" Margin="0,0,12,0" Background="#FFF" BorderBrush="#DDD"/>
-            <Button Content="Crop 표시" Width="100" Click="Crop_Show_Click" Margin="0,0,12,0" Background="#FFF" BorderBrush="#DDD"/>
+            <!--<Button Content="파라미터..." Width="110" Click="OpenParamsDialog_Click" Margin="0,0,12,0" Background="#FFF" BorderBrush="#DDD"/>
+            <Button Content="Crop 표시" Width="100" Click="Crop_Show_Click" Margin="0,0,12,0" Background="#FFF" BorderBrush="#DDD"/>-->
 
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="이미지를 열어주세요." Foreground="#444"/>
         </StackPanel>
@@ -47,7 +47,7 @@
                 </DockPanel>
             </Border>
 
-            <!-- RIGHT: LogicTree + 검사 이미지 + Crop Preview + MiniMap -->
+            <!-- RIGHT: 파라미터 요약(전체 폭) + 검사 이미지 + Crop Preview -->
             <Border Grid.Column="2" BorderBrush="#E6E9EE" BorderThickness="1" Background="#FFFFFF" CornerRadius="8" Padding="8">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -56,9 +56,63 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Grid.Row="0">
-                        <TextBlock DockPanel.Dock="Top" Text="Logic Tree" FontSize="16" FontWeight="SemiBold" Margin="6"/>
-                        <ScrollViewer>
-                            <TreeView x:Name="LogicTreeView" Margin="6"/>
+                        <DockPanel.Resources>
+                            <Style TargetType="ScrollViewer">
+                                <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+                                <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+                            </Style>
+                        </DockPanel.Resources>
+
+                        <TextBlock DockPanel.Dock="Top" Text="현재 파라미터" FontSize="16" FontWeight="SemiBold" Margin="6"/>
+
+                        <DockPanel Margin="6" DockPanel.Dock="Top" LastChildFill="False">
+                            <TextBlock Text="사용 중인 값" FontWeight="SemiBold" FontSize="12" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                            <Button x:Name="OpenParamsFromPanelBtn" Content="변경..." Width="70" Height="22"
+                                    FontSize="11" DockPanel.Dock="Right" Click="OpenParamsDialog_Click"
+                                    Background="#FFF" BorderBrush="#DDD"/>
+                        </DockPanel>
+
+                        <ScrollViewer Margin="6,0,6,6" CanContentScroll="False">
+                            <UniformGrid Columns="2" x:Name="ParamSummaryGrid">
+                                <TextBlock Text="Dark_면적비율" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_FormMinAreaRatio" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="Dark_원형도" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_Roundness" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="Dark_면적비율" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_DarkAreaPercent" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="Dark_최소밝기" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_LinearBaseBright" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="Dark_기울기 하한" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_LineAngleLow" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="Dark_기울기 상한" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_LineAngleHigh" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="White_밝기 기준값(피크)" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_WhitePeakIf" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="White_돌출 기준값(피크)" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_WhitePeakElseIf" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="White_라인성 비율" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_WhiteRatio" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="White_라인 기준값(피크)" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_WhiteLinePeak" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="선형성 비율" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_LinearityRatio" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="최소 불량 크기" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_AreaMin" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+
+                                <TextBlock Text="모폴로지 연산횟수" FontSize="11" Margin="2" Foreground="#555"/>
+                                <TextBlock x:Name="PText_NdilCnt" FontSize="11" Margin="2" FontWeight="SemiBold"/>
+                            </UniformGrid>
                         </ScrollViewer>
                     </DockPanel>
 
@@ -82,7 +136,7 @@
                             </Border>
                         </StackPanel>
 
-                        <!-- 오른쪽 작은 패널: Cropped Preview + MiniMap -->
+                        <!-- 오른쪽 작은 패널: Cropped Preview -->
                         <StackPanel Grid.Column="1" Margin="8,0,0,0">
                             <TextBlock Text="Cropped Preview" FontWeight="SemiBold" Margin="0,0,0,6"/>
                             <Border Height="120" Background="#FFF" BorderBrush="#EEE" BorderThickness="1" CornerRadius="4">
@@ -103,38 +157,82 @@
             <GroupBox Header="Feature" Margin="0,0,8,0" FontFamily="Segoe UI">
                 <ScrollViewer Margin="8" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <!-- Rows 속성 제거: UniformGrid가 항목 수에 맞춰 자동 배치합니다 -->
                         <UniformGrid Columns="2" Margin="0,0,0,6">
-                            <TextBlock Text="X" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Fx" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Y" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Fy" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Width" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Fw" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Height" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Fh" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Area" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Farea" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Mean" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Fmean" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Aspect" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Faspect" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Type (Name)" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Ftype" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Type (Code)" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FDefectCode" FontSize="13" Margin="4"/>
-                            <TextBlock Text="IsDark" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FIsDark" FontSize="13" Margin="4"/>
+                            <TextBlock Text="X" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Fx" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Y" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Fy" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Width" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Fw" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Height" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Fh" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Area" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Farea" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Mean" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Fmean" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Aspect" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Faspect" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Type (Name)" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Ftype" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Type (Code)" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FDefectCode" FontSize="13" Margin="4"/>
+                            <TextBlock Text="IsDark" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FIsDark" FontSize="13" Margin="4"/>
                         </UniformGrid>
 
                         <UniformGrid Columns="2" Margin="0,0,0,0">
-                            <TextBlock Text="IsLinear" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FIsLinear" FontSize="13" Margin="4"/>
-                            <TextBlock Text="AreaRatio" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FareaRatio" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Circularity" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="Fcircularity" FontSize="13" Margin="4"/>
-                            <TextBlock Text="Angle (deg)" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FangleDeg" FontSize="13" Margin="4"/>
-                            <TextBlock Text="PeakMax" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FpeakMax" FontSize="13" Margin="4"/>
-                            <TextBlock Text="AreaObjPercent" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FareaObjPercent" FontSize="13" Margin="4"/>
-                            <TextBlock Text="RatioMopol" Margin="4" VerticalAlignment="Center"/><TextBlock x:Name="FratioMopol" FontSize="13" Margin="4"/>
+                            <TextBlock Text="IsLinear" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FIsLinear" FontSize="13" Margin="4"/>
+                            <TextBlock Text="AreaRatio" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FareaRatio" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Circularity" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="Fcircularity" FontSize="13" Margin="4"/>
+                            <TextBlock Text="Angle (deg)" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FangleDeg" FontSize="13" Margin="4"/>
+                            <TextBlock Text="PeakMax" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FpeakMax" FontSize="13" Margin="4"/>
+                            <TextBlock Text="AreaObjPercent" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FareaObjPercent" FontSize="13" Margin="4"/>
+                            <TextBlock Text="RatioMopol" Margin="4" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="FratioMopol" FontSize="13" Margin="4"/>
                         </UniformGrid>
                     </StackPanel>
                 </ScrollViewer>
             </GroupBox>
 
-            <Border Grid.Column="1" Background="#FAFBFC" BorderBrush="#EEE" BorderThickness="1" CornerRadius="6" Padding="12">
-                <StackPanel>
-                    <TextBlock Text="파라미터는 '파라미터...' 버튼으로 열립니다." FontStyle="Italic" Foreground="#666"/>
-                    <TextBlock Text="선택된 불량의 크롭 프리뷰와 미니맵이 우측에 표시됩니다." Margin="0,8,0,0"/>
-                </StackPanel>
+            <!-- Logic Tree + 여유값 범례 (같이 이동) -->
+            <Border Grid.Column="1" BorderBrush="#EEE" BorderThickness="1" Background="#FAFBFC" CornerRadius="6" Padding="8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="130"/>
+                    </Grid.ColumnDefinitions>
+
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Top" Text="Logic Tree" FontSize="16" FontWeight="SemiBold" Margin="6"/>
+                        <ScrollViewer>
+                            <TreeView x:Name="LogicTreeView" Margin="6"/>
+                        </ScrollViewer>
+                    </DockPanel>
+
+                    <!-- 여유값(Margin) 색상 범례 -->
+                    <StackPanel Grid.Column="1" Margin="8,6,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="여유값 범례" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,6"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Border Width="10" Height="10" Background="OrangeRed" CornerRadius="2" Margin="0,0,6,0"/>
+                            <TextBlock Text="5% 미만" FontSize="10"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Border Width="10" Height="10" Background="DarkGoldenrod" CornerRadius="2" Margin="0,0,6,0"/>
+                            <TextBlock Text="15% 미만" FontSize="10"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="10" Height="10" Background="SeaGreen" CornerRadius="2" Margin="0,0,6,0"/>
+                            <TextBlock Text="충분한 여유" FontSize="10"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Grid>
