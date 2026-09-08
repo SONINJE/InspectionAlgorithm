@@ -52,6 +52,24 @@ public partial class MainWindow : Window
 
     private readonly string _paramsFilePath = Path.Combine(AppContext.BaseDirectory, "inspect_params.json");
 
+    // 검색용: 프로젝트에 사용된 파라미터 키 목록 (LogicTree에서 클릭 시 매칭에 사용)
+    private static readonly HashSet<string> s_paramKeys = new(StringComparer.Ordinal)
+    {
+        "D_FORM_MIN_AREA_RATIO",
+        "D_ROUNDNESS",
+        "D_DARK_AREA_PERCENT",
+        "D_LINEAR_BASE_BRIGHT",
+        "D_LINE_ANGLE_LOW",
+        "D_LINE_ANGLE_HIGH",
+        "D_WHITE_PEAK_IF",
+        "D_WHITE_PEAK_ELSEIF",
+        "D_WHITE_RATIO",
+        "D_WHITE_LINE_PEAK",
+        "D_LINEARITY_RATIO",
+        "AREA_MIN",
+        "NDIL_CNT"
+    };
+
     public MainWindow()
     {
         InitializeComponent();
@@ -70,6 +88,9 @@ public partial class MainWindow : Window
 
         try { LoadParamsFromJson(); } catch { }
         UpdateParamSummaryPanel();
+
+        // LogicTree 클릭 시 파라미터 하이라이트 처리 핸들러 연결
+        LogicTreeView.SelectedItemChanged += LogicTreeView_SelectedItemChanged;
 
         // 초기 상태: overlay 캔버스 크기 동기화
         ImageOverlayCanvas.Width = ImageView.ActualWidth;
@@ -333,7 +354,13 @@ public partial class MainWindow : Window
             Foreground = result ? Brushes.DarkGreen : Brushes.IndianRed
         });
 
-        var item = new TreeViewItem { Header = panel, IsExpanded = true };
+        // LogicTree 선택 시 연결할 파라미터 키
+        var item = new TreeViewItem
+        {
+            Header = panel,
+            IsExpanded = true,
+            Tag = new[] { paramName }
+        };
         parent.Items.Add(item);
         return item;
     }
@@ -385,7 +412,13 @@ public partial class MainWindow : Window
             Foreground = result ? Brushes.DarkGreen : Brushes.IndianRed
         });
 
-        var item = new TreeViewItem { Header = panel, IsExpanded = true };
+        // 범위 조건은 하한/상한 파라미터를 함께 강조
+        var item = new TreeViewItem
+        {
+            Header = panel,
+            IsExpanded = true,
+            Tag = new[] { lowName, highName }
+        };
         parent.Items.Add(item);
         return item;
     }
@@ -430,10 +463,68 @@ public partial class MainWindow : Window
             Foreground = result ? Brushes.DarkGreen : Brushes.IndianRed
         });
 
-        var item = new TreeViewItem { Header = panel, IsExpanded = true };
+        // 구간 조건은 하한/상한 파라미터를 함께 강조
+        var item = new TreeViewItem
+        {
+            Header = panel,
+            IsExpanded = true,
+            Tag = new[] { lowName, highName }
+        };
         parent.Items.Add(item);
         return item;
     }
+
+    // LogicTree의 비교 노드를 클릭하면 하단 파라미터 요약에서 사용한 값을 강조한다.
+    private void LogicTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        ClearParamHighlights();
+
+        if (e.NewValue is not TreeViewItem { Tag: string[] parameterKeys })
+            return;
+
+        foreach (string parameterKey in parameterKeys)
+        {
+            if (GetParamValueTextBlock(parameterKey) is not TextBlock parameterText)
+                continue;
+
+            parameterText.Background = Brushes.Gold;
+            parameterText.Foreground = Brushes.Black;
+            parameterText.FontWeight = FontWeights.Bold;
+            parameterText.BringIntoView();
+        }
+    }
+
+    private void ClearParamHighlights()
+    {
+        foreach (string parameterKey in s_paramKeys)
+        {
+            if (GetParamValueTextBlock(parameterKey) is not TextBlock parameterText)
+                continue;
+
+            // 기존 XAML 스타일을 그대로 복원한다.
+            parameterText.ClearValue(TextBlock.BackgroundProperty);
+            parameterText.ClearValue(TextBlock.ForegroundProperty);
+            parameterText.ClearValue(TextBlock.FontWeightProperty);
+        }
+    }
+
+    private TextBlock? GetParamValueTextBlock(string parameterKey) => parameterKey switch
+    {
+        "D_FORM_MIN_AREA_RATIO" => PText_FormMinAreaRatio,
+        "D_ROUNDNESS" => PText_Roundness,
+        "D_DARK_AREA_PERCENT" => PText_DarkAreaPercent,
+        "D_LINEAR_BASE_BRIGHT" => PText_LinearBaseBright,
+        "D_LINE_ANGLE_LOW" => PText_LineAngleLow,
+        "D_LINE_ANGLE_HIGH" => PText_LineAngleHigh,
+        "D_WHITE_PEAK_IF" => PText_WhitePeakIf,
+        "D_WHITE_PEAK_ELSEIF" => PText_WhitePeakElseIf,
+        "D_WHITE_RATIO" => PText_WhiteRatio,
+        "D_WHITE_LINE_PEAK" => PText_WhiteLinePeak,
+        "D_LINEARITY_RATIO" => PText_LinearityRatio,
+        "AREA_MIN" => PText_AreaMin,
+        "NDIL_CNT" => PText_NdilCnt,
+        _ => null
+    };
 
     private void BuildLogicTree(DefectResult r)
     {

@@ -7,6 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationIcon>f로직트리.ico</ApplicationIcon>
   </PropertyGroup>
 
   <Target Name="CopyNativeDlls" AfterTargets="Build">
@@ -18,4 +19,8 @@
     </ItemGroup>
     <Copy SourceFiles="@(NativeDlls)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
   </Target>
+
+  <ItemGroup>
+    <Content Include="f로직트리.ico" />
+  </ItemGroup>
 </Project>
