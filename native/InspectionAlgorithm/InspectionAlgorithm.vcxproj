@@ -81,4 +81,14 @@
     <ClCompile Include="InspectionAlgorithm.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
+  <!-- InspectionAlgorithm.cpp가 OpenCV(cv::Mat)를 실제로 쓰므로, 런타임에 opencv_world*.dll이
+       InspectionAlgorithm.dll과 같은 폴더에 있어야 한다. Debug/Release에 맞는 버전을 OutDir로 복사한다. -->
+  <Target Name="CopyOpenCvRuntime" AfterTargets="Build">
+    <ItemGroup>
+      <OpenCvRuntimeDll Condition="'$(Configuration)'=='Debug'" Include="$(ProjectDir)third_party\opencv\x64\bin\opencv_world490d.dll" />
+      <OpenCvRuntimeDll Condition="'$(Configuration)'=='Release'" Include="$(ProjectDir)third_party\opencv\x64\bin\opencv_world490.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OpenCvRuntimeDll)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(OpenCvRuntimeDll.Identity)')" />
+  </Target>
 </Project>

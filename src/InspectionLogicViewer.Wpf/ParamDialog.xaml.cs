@@ -1,181 +1,196 @@
 using System;
-using System.Windows;
+using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
+using System.Windows;
+using System.Windows.Controls;
 
 namespace InspectionLogicViewer.Wpf;
 
 public partial class ParamDialog : Window
 {
-    public double D_FORM_MIN_AREA_RATIO { get; private set; }
-    public double D_ROUNDNESS { get; private set; }
-    public double D_DARK_AREA_PERCENT { get; private set; }
-    public double D_LINEAR_BASE_BRIGHT { get; private set; }
-    public double D_LINE_ANGLE_LOW { get; private set; }
-    public double D_LINE_ANGLE_HIGH { get; private set; }
-    public double D_WHITE_PEAK_IF { get; private set; }
-    public double D_WHITE_PEAK_ELSEIF { get; private set; }
-    public double D_WHITE_RATIO { get; private set; }
-    public double D_WHITE_LINE_PEAK { get; private set; }
-    public double D_LINEARITY_RATIO { get; private set; }
-    public int AREA_MIN { get; private set; }
-    public int NDIL_CNT { get; private set; }
+    public InspectParams Params { get; private set; }
 
+    private readonly Dictionary<string, TextBox> _fieldBoxes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CheckBox> _judgeBoxes = new(StringComparer.Ordinal);
     private readonly string _paramsFilePath = Path.Combine(AppContext.BaseDirectory, "inspect_params.json");
 
-    public ParamDialog(
-        double formMinAreaRatio,
-        double roundness,
-        double darkAreaPercent,
-        double linearBaseBright,
-        double lineAngleLow,
-        double lineAngleHigh,
-        double whitePeakIf,
-        double whitePeakElseIf,
-        double whiteRatio,
-        double whiteLinePeak,
-        double linearityRatio,
-        int areaMin,
-        int ndilCnt)
+    public ParamDialog(InspectParams current)
     {
         InitializeComponent();
 
-        D_FORM_MIN_AREA_RATIO = formMinAreaRatio;
-        D_ROUNDNESS = roundness;
-        D_DARK_AREA_PERCENT = darkAreaPercent;
-        D_LINEAR_BASE_BRIGHT = linearBaseBright;
-        D_LINE_ANGLE_LOW = lineAngleLow;
-        D_LINE_ANGLE_HIGH = lineAngleHigh;
-        D_WHITE_PEAK_IF = whitePeakIf;
-        D_WHITE_PEAK_ELSEIF = whitePeakElseIf;
-        D_WHITE_RATIO = whiteRatio;
-        D_WHITE_LINE_PEAK = whiteLinePeak;
-        D_LINEARITY_RATIO = linearityRatio;
-        AREA_MIN = areaMin;
-        NDIL_CNT = ndilCnt;
+        Params = current.Clone();
+        BuildFieldRows();
+        BuildUseJudgeSection();
+        BindValuesToFields(Params);
+    }
 
-        // √ ±‚∞™ √§øÏ±‚
-        Txt_FormMinAreaRatio.Text = D_FORM_MIN_AREA_RATIO.ToString("G");
-        Txt_Roundness.Text = D_ROUNDNESS.ToString("G");
-        Txt_DarkAreaPercent.Text = D_DARK_AREA_PERCENT.ToString("G");
-        Txt_LinearBaseBright.Text = D_LINEAR_BASE_BRIGHT.ToString("G");
-        Txt_LineAngleLow.Text = D_LINE_ANGLE_LOW.ToString("G");
-        Txt_LineAngleHigh.Text = D_LINE_ANGLE_HIGH.ToString("G");
-        Txt_WhitePeakIf.Text = D_WHITE_PEAK_IF.ToString("G");
-        Txt_WhitePeakElseIf.Text = D_WHITE_PEAK_ELSEIF.ToString("G");
-        Txt_WhiteRatio.Text = D_WHITE_RATIO.ToString("G");
-        Txt_WhiteLinePeak.Text = D_WHITE_LINE_PEAK.ToString("G");
-        Txt_LinearityRatio.Text = D_LINEARITY_RATIO.ToString("G");
-        Txt_AreaMin.Text = AREA_MIN.ToString();
-        Txt_NdilCnt.Text = NDIL_CNT.ToString();
+    // ParamCatalogÎ•º Í∏∞Î∞òÏúºÎ°ú ÎùºÎ≤®+ÏûÖÎ†•Ï∞Ω ÌñâÏùÑ ÎèôÏ†ÅÏúºÎ°ú ÏÉùÏÑ±ÌïúÎã§.
+    // Í∞ôÏùÄ GroupÎÅºÎ¶¨Îäî ÏÜåÏ†úÎ™©Í≥º Íµ¨Î∂ÑÏÑ†ÏúºÎ°ú Î¨∂Ïñ¥ÏÑú Î≥¥Ïó¨Ï§ÄÎã§.
+    private void BuildFieldRows()
+    {
+        ParamFieldsHost.Children.Clear();
+        _fieldBoxes.Clear();
+
+        string? lastGroup = null;
+        foreach (var field in ParamCatalog.Fields)
+        {
+            if (field.Group != lastGroup)
+            {
+                if (lastGroup != null)
+                    ParamFieldsHost.Children.Add(new Border
+                    {
+                        Height = 1,
+                        Background = (System.Windows.Media.Brush)FindResource("CardBorderBrush"),
+                        Margin = new Thickness(0, 4, 0, 16)
+                    });
+
+                ParamFieldsHost.Children.Add(new TextBlock
+                {
+                    Text = field.Group,
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = (System.Windows.Media.Brush)FindResource("AccentBrush"),
+                    Margin = new Thickness(0, 0, 0, 10)
+                });
+                lastGroup = field.Group;
+            }
+
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+
+            var label = new TextBlock
+            {
+                Text = field.Label,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+            Grid.SetColumn(label, 0);
+            row.Children.Add(label);
+
+            var box = new TextBox { Style = (Style)FindResource("FieldTextBox") };
+            Grid.SetColumn(box, 1);
+            row.Children.Add(box);
+
+            _fieldBoxes[field.Key] = box;
+            ParamFieldsHost.Children.Add(row);
+        }
+    }
+
+    // Ïã§Ï†ú ÌåêÏ†ï Î°úÏßÅÏùò UseJudge(Î™®Îç∏Î≥Ñ ÌåêÏ†ï ÏÇ¨Ïö© Ïó¨Î∂Ä)Î•º ÌùâÎÇ¥ ÎÇ∏ Ï≤¥ÌÅ¨Î∞ïÏä§ ÏÑπÏÖò.
+    // ÌëúÎ©¥ Ï¢ÖÎ•ò(Ï†àÏó∞Î∂Ä/Î¨¥ÏßÄÎ∂Ä/ÏΩîÌåÖÎ∂Ä)Î≥ÑÎ°ú Î¨∂Ïñ¥ÏÑú Î≥¥Ïó¨Ï§ÄÎã§.
+    private void BuildUseJudgeSection()
+    {
+        _judgeBoxes.Clear();
+
+        ParamFieldsHost.Children.Add(new Border
+        {
+            Height = 1,
+            Background = (System.Windows.Media.Brush)FindResource("CardBorderBrush"),
+            Margin = new Thickness(0, 4, 0, 16)
+        });
+        ParamFieldsHost.Children.Add(new TextBlock
+        {
+            Text = "ÌåêÏ†ï ÏÇ¨Ïö© Ïó¨Î∂Ä (UseJudge)",
+            FontSize = 12,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (System.Windows.Media.Brush)FindResource("AccentBrush"),
+            Margin = new Thickness(0, 0, 0, 10)
+        });
+
+        AddJudgeGroup("Ï†àÏó∞Î∂Ä", RealDefectCatalog.InsulCodes);
+        AddJudgeGroup("Î¨¥ÏßÄÎ∂Ä", RealDefectCatalog.NullCodes);
+        AddJudgeGroup("ÏΩîÌåÖÎ∂Ä", RealDefectCatalog.CoatingCodes);
+    }
+
+    private void AddJudgeGroup(string groupLabel, IReadOnlyList<string> codes)
+    {
+        ParamFieldsHost.Children.Add(new TextBlock
+        {
+            Text = groupLabel,
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = (System.Windows.Media.Brush)FindResource("TextSecondaryBrush"),
+            Margin = new Thickness(0, 0, 0, 6)
+        });
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, 14) };
+        foreach (var code in codes)
+        {
+            var box = new CheckBox
+            {
+                Content = $"{RealDefectCatalog.DisplayName(code)} ({code})",
+                Margin = new Thickness(0, 0, 16, 8),
+                Foreground = (System.Windows.Media.Brush)FindResource("TextPrimaryBrush")
+            };
+            _judgeBoxes[code] = box;
+            wrap.Children.Add(box);
+        }
+        ParamFieldsHost.Children.Add(wrap);
+    }
+
+    private void BindValuesToFields(InspectParams p)
+    {
+        foreach (var field in ParamCatalog.Fields)
+            _fieldBoxes[field.Key].Text = field.Get(p).ToString("G");
+
+        foreach (var (code, box) in _judgeBoxes)
+            box.IsChecked = !p.UseJudge.TryGetValue(code, out var v) || v;
+    }
+
+    private bool TryReadFieldsInto(InspectParams p)
+    {
+        foreach (var field in ParamCatalog.Fields)
+        {
+            if (!double.TryParse(_fieldBoxes[field.Key].Text, out var value))
+            {
+                MessageBox.Show($"'{field.Label}' Í∞íÏù¥ Ïò¨Î∞îÎ•¥ÏßÄ ÏïäÏäµÎãàÎã§.", "ÏûÖÎ†• Ïò§Î•ò", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            field.Set(p, value);
+        }
+
+        foreach (var (code, box) in _judgeBoxes)
+            p.UseJudge[code] = box.IsChecked == true;
+
+        return true;
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        if (double.TryParse(Txt_FormMinAreaRatio.Text, out var dv)) D_FORM_MIN_AREA_RATIO = dv;
-        if (double.TryParse(Txt_Roundness.Text, out dv)) D_ROUNDNESS = dv;
-        if (double.TryParse(Txt_DarkAreaPercent.Text, out dv)) D_DARK_AREA_PERCENT = dv;
-        if (double.TryParse(Txt_LinearBaseBright.Text, out dv)) D_LINEAR_BASE_BRIGHT = dv;
-        if (double.TryParse(Txt_LineAngleLow.Text, out dv)) D_LINE_ANGLE_LOW = dv;
-        if (double.TryParse(Txt_LineAngleHigh.Text, out dv)) D_LINE_ANGLE_HIGH = dv;
-        if (double.TryParse(Txt_WhitePeakIf.Text, out dv)) D_WHITE_PEAK_IF = dv;
-        if (double.TryParse(Txt_WhitePeakElseIf.Text, out dv)) D_WHITE_PEAK_ELSEIF = dv;
-        if (double.TryParse(Txt_WhiteRatio.Text, out dv)) D_WHITE_RATIO = dv;
-        if (double.TryParse(Txt_WhiteLinePeak.Text, out dv)) D_WHITE_LINE_PEAK = dv;
-        if (double.TryParse(Txt_LinearityRatio.Text, out dv)) D_LINEARITY_RATIO = dv;
-        if (int.TryParse(Txt_AreaMin.Text, out var iv)) AREA_MIN = iv;
-        if (int.TryParse(Txt_NdilCnt.Text, out iv)) NDIL_CNT = iv;
-
+        if (!TryReadFieldsInto(Params)) return;
         DialogResult = true;
         Close();
     }
 
-
-
-
-
-    // JSON ¿˙¿Â/∑ŒµÂ (¥Ÿ¿ÃæÛ∑Œ±◊ø°º≠ ¡˜¡¢)
-    private class InspectParamsJson
-    {
-        public double D_FORM_MIN_AREA_RATIO { get; set; }
-        public double D_ROUNDNESS { get; set; }
-        public double D_DARK_AREA_PERCENT { get; set; }
-        public double D_LINEAR_BASE_BRIGHT { get; set; }
-        public double D_LINE_ANGLE_LOW { get; set; }
-        public double D_LINE_ANGLE_HIGH { get; set; }
-        public double D_WHITE_PEAK_IF { get; set; }
-        public double D_WHITE_PEAK_ELSEIF { get; set; }
-        public double D_WHITE_RATIO { get; set; }
-        public double D_WHITE_LINE_PEAK { get; set; }
-        public double D_LINEARITY_RATIO { get; set; }
-        public int AREA_MIN { get; set; }
-        public int NDIL_CNT { get; set; }
-    }
-
     private void SaveJson_Click(object sender, RoutedEventArgs e)
     {
-        // ∏’¿˙ »≠∏È¿« ∞™¿ª ¿–¿Ω
-        Ok_Click(sender, null);
-
-        var p = new InspectParamsJson
-        {
-            D_FORM_MIN_AREA_RATIO = D_FORM_MIN_AREA_RATIO,
-            D_ROUNDNESS = D_ROUNDNESS,
-            D_DARK_AREA_PERCENT = D_DARK_AREA_PERCENT,
-            D_LINEAR_BASE_BRIGHT = D_LINEAR_BASE_BRIGHT,
-            D_LINE_ANGLE_LOW = D_LINE_ANGLE_LOW,
-            D_LINE_ANGLE_HIGH = D_LINE_ANGLE_HIGH,
-            D_WHITE_PEAK_IF = D_WHITE_PEAK_IF,
-            D_WHITE_PEAK_ELSEIF = D_WHITE_PEAK_ELSEIF,
-            D_WHITE_RATIO = D_WHITE_RATIO,
-            D_WHITE_LINE_PEAK = D_WHITE_LINE_PEAK,
-            D_LINEARITY_RATIO = D_LINEARITY_RATIO,
-            AREA_MIN = AREA_MIN,
-            NDIL_CNT = NDIL_CNT
-        };
+        if (!TryReadFieldsInto(Params)) return;
 
         try
         {
-            var opts = new JsonSerializerOptions { WriteIndented = true };
-            string json = JsonSerializer.Serialize(p, opts);
-            File.WriteAllText(_paramsFilePath, json);
-            MessageBox.Show("∆ƒ∂ÛπÃ≈Õ∏¶ JSONø° ¿˙¿Â«ﬂΩ¿¥œ¥Ÿ.");
+            Params.SaveToFile(_paramsFilePath);
+            MessageBox.Show("ÌååÎùºÎØ∏ÌÑ∞Î•º JSONÏóê Ï†ÄÏû•ÌñàÏäµÎãàÎã§.");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"∆ƒ∂ÛπÃ≈Õ ¿˙¿Â Ω«∆–: {ex.Message}");
+            MessageBox.Show($"ÌååÎùºÎØ∏ÌÑ∞ Ï†ÄÏû• Ïã§Ìå®: {ex.Message}");
         }
     }
 
     private void LoadJson_Click(object sender, RoutedEventArgs e)
     {
-        if (!File.Exists(_paramsFilePath)) { MessageBox.Show("¿˙¿Âµ» JSON ∆ƒ¿œ¿Ã æ¯Ω¿¥œ¥Ÿ."); return; }
+        if (!File.Exists(_paramsFilePath)) { MessageBox.Show("Ï†ÄÏû•Îêú JSON ÌååÏùºÏù¥ ÏóÜÏäµÎãàÎã§."); return; }
 
         try
         {
-            string json = File.ReadAllText(_paramsFilePath);
-            var p = JsonSerializer.Deserialize<InspectParamsJson>(json);
-            if (p == null) { MessageBox.Show("JSON ∆ƒΩÃ Ω«∆–"); return; }
-
-            Txt_FormMinAreaRatio.Text = p.D_FORM_MIN_AREA_RATIO.ToString("G");
-            Txt_Roundness.Text = p.D_ROUNDNESS.ToString("G");
-            Txt_DarkAreaPercent.Text = p.D_DARK_AREA_PERCENT.ToString("G");
-            Txt_LinearBaseBright.Text = p.D_LINEAR_BASE_BRIGHT.ToString("G");
-            Txt_LineAngleLow.Text = p.D_LINE_ANGLE_LOW.ToString("G");
-            Txt_LineAngleHigh.Text = p.D_LINE_ANGLE_HIGH.ToString("G");
-            Txt_WhitePeakIf.Text = p.D_WHITE_PEAK_IF.ToString("G");
-            Txt_WhitePeakElseIf.Text = p.D_WHITE_PEAK_ELSEIF.ToString("G");
-            Txt_WhiteRatio.Text = p.D_WHITE_RATIO.ToString("G");
-            Txt_WhiteLinePeak.Text = p.D_WHITE_LINE_PEAK.ToString("G");
-            Txt_LinearityRatio.Text = p.D_LINEARITY_RATIO.ToString("G");
-            Txt_AreaMin.Text = p.AREA_MIN.ToString();
-            Txt_NdilCnt.Text = p.NDIL_CNT.ToString();
-
-            MessageBox.Show("JSONø°º≠ ∆ƒ∂ÛπÃ≈Õ∏¶ ∫“∑Øø‘Ω¿¥œ¥Ÿ.");
+            Params = InspectParams.LoadFromFile(_paramsFilePath);
+            BindValuesToFields(Params);
+            MessageBox.Show("JSONÏóêÏÑú ÌååÎùºÎØ∏ÌÑ∞Î•º Î∂àÎü¨ÏôîÏäµÎãàÎã§.");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"∆ƒ∂ÛπÃ≈Õ ∫“∑Øø¿±‚ Ω«∆–: {ex.Message}");
+            MessageBox.Show($"ÌååÎùºÎØ∏ÌÑ∞ Î∂àÎü¨Ïò§Í∏∞ Ïã§Ìå®: {ex.Message}");
         }
     }
 }

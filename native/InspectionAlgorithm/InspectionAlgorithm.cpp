@@ -2,256 +2,569 @@
 #include <windows.h>          // 명시적으로 가장 먼저
 #define NOMINMAX              // windows.h의 min/max 매크로가 std::min/max와 충돌하는 것 방지
 #include "InspectionAlgorithm.h"
-#include "Fchain.h"      // CChain 클래스
+#include "Fchain.h"      // CChain 클래스 (실제 로직과 동일한 클래스)
+#include <opencv2/opencv.hpp>
 #include <vector>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <memory>  
-
-// 기본값 (원래의 constexpr 값들)
-static constexpr double DEF_D_FORM_MIN_AREA_RATIO = 0.25;
-static constexpr double DEF_D_ROUNDNESS = 0.60;
-static constexpr double DEF_D_DARK_AREA_PERCENT = 0.05;
-static constexpr double DEF_D_LINEAR_BASE_BRIGHT = 40.0;
-static constexpr double DEF_D_LINE_ANGLE_LOW = 10.0;
-static constexpr double DEF_D_LINE_ANGLE_HIGH = 90.0;
-
-static constexpr double DEF_D_WHITE_PEAK_IF = 60.0;
-static constexpr double DEF_D_WHITE_PEAK_ELSEIF = 40.0;
-static constexpr double DEF_D_WHITE_RATIO = 1.50;
-static constexpr double DEF_D_WHITE_LINE_PEAK = 50.0;
-
-static constexpr double DEF_D_LINEARITY_RATIO = 3.0;
-static constexpr int    DEF_AREA_MIN = 4;
-static constexpr int    DEF_NDIL_CNT = 2;
-
-// 런타임에서 변경 가능한 전역 변수
-static double g_D_FORM_MIN_AREA_RATIO = DEF_D_FORM_MIN_AREA_RATIO;
-static double g_D_ROUNDNESS = DEF_D_ROUNDNESS;
-static double g_D_DARK_AREA_PERCENT = DEF_D_DARK_AREA_PERCENT;
-static double g_D_LINEAR_BASE_BRIGHT = DEF_D_LINEAR_BASE_BRIGHT;
-static double g_D_LINE_ANGLE_LOW = DEF_D_LINE_ANGLE_LOW;
-static double g_D_LINE_ANGLE_HIGH = DEF_D_LINE_ANGLE_HIGH;
-
-static double g_D_WHITE_PEAK_IF = DEF_D_WHITE_PEAK_IF;
-static double g_D_WHITE_PEAK_ELSEIF = DEF_D_WHITE_PEAK_ELSEIF;
-static double g_D_WHITE_RATIO = DEF_D_WHITE_RATIO;
-static double g_D_WHITE_LINE_PEAK = DEF_D_WHITE_LINE_PEAK;
-
-static double g_D_LINEARITY_RATIO = DEF_D_LINEARITY_RATIO;
-static int    g_AREA_MIN = DEF_AREA_MIN;
-static int    g_NDIL_CNT = DEF_NDIL_CNT;
-
-enum DefectType
-{
-    DEFECT_UNKNOWN = 0,
-    DEFECT_SCRATCH = 1,
-    DEFECT_CRATER = 10,
-    DEFECT_CRACK = 11,
-    DEFECT_WEAK_POINT_D = 12,
-    DEFECT_BLACK_WEAK = 13,
-    DEFECT_PINHOLE = 20,
-    DEFECT_MICRO_SCRATCH = 21,
-    DEFECT_DENT = 22,
-    DEFECT_WHITE_WEAK = 23,
-    DEFECT_LINE = 30
-};
-
-// blob 하나에서 추출한 특징값
-struct BlobFeature
-{
-    int    x, y, w, h;
-    double area;
-    double areaRatio;      // B-면적비율 (blob면적 / bbox면적)
-    double circularity;    // 원형도 (Compactness)
-    double angleDeg;       // 기울기
-    double peakMin;        // 최소 편차 피크
-    double peakMax;        // 최대 편차 피크
-    double areaObjPercent; // 이미지 대비 면적%
-    double ratioMopol;     // dRatio_mopol (핀홀류 모폴로지 후 세로:가로 비율)
-    double ratio;          // 세로:가로 비율 (라인성 판단용)
-    bool   isDark;         // true=다크(black), false=화이트(white)
-};
+#include <memory>
 
 // ============================================================
-// 라인성 판단
+// 후보 검출(1단계) 관련 상수 — SetDefectInfo에는 없는, 이 뷰어 자체의 "후보 찾기" 단계에서만 쓰인다.
+// 실제 운영 코드의 후보 검색(캔디데이트 서치) 알고리즘은 제공되지 않아 기존 방식을 그대로 둔다.
 // ============================================================
-static bool IsLinearBlob(const BlobFeature& f)
+static constexpr int kCandidateAreaMin = 4;
+static constexpr int kCropMargin = 12;        // 후보 bbox 주변에 얼마나 여유를 두고 크롭할지
+static constexpr int kMopologyDilateCount = 2; // SetDefectInfo 원본과 동일: 팽창 2회
+static constexpr int kPeakSubRange = 4;        // SetDefectInfo 원본과 동일: 피크치 계산시 ±4 여유
+
+// ============================================================
+// 실제 로직(TREE_PARAM) 파라미터 — C#에서 SetRealTreeParams로 갱신한다.
+// ============================================================
+static RealTreeParams g_params = {
+    /*TargetBright*/    128,
+    /*Weight_W*/        1,
+    /*Weight_B*/        1,
+    /*BinaryW*/         30,
+    /*BinaryB*/         30,
+    /*BinaryNull*/      20,
+    /*InsulBinaryW*/    30,
+    /*InsulBinaryB*/    30,
+    /*Ratio_W*/         3.0,
+    /*Ratio_B*/         3.0,
+    /*SizeY_W*/         5.0,
+    /*SizeY_B*/         5.0,
+    /*SizeX_B*/         3.0,
+    /*ThPinhole*/       60.0,
+    /*ThExtrude*/       40.0,
+    /*ThWhiteLine*/     50.0,
+    /*ThDarkDefectMin*/ 40.0,
+    /*BlackMinArea*/    50.0,
+    /*CompactnessB*/    0.60,
+    /*PercentB*/        5.0,
+    /*AngleLow*/        10.0,
+    /*AngleHigh*/       80.0,
+    /*ScaleX*/          1.0,
+    /*ScaleY*/          1.0,
+    /*UseGaussian*/     1
+};
+
+extern "C" INSPECT_API void SetRealTreeParams(const RealTreeParams* params)
 {
-    return f.ratio > g_D_LINEARITY_RATIO;
+    if (!params) return;
+    g_params = *params;
 }
 
-static int Dilate_BinaryMini(LPBYTE fmSour, LPBYTE fmDest, int nWidth, int nHeight, int nPitch)
+extern "C" INSPECT_API void GetRealTreeParams(RealTreeParams* params)
 {
-    int nOrgX{}, nOrgY{};
-    int nKernelSizeY{}, nKernelSizeX{};
-    nKernelSizeY = nKernelSizeX = 3;
-    int kernel[9]{};
-    for (int i = 0; i < 9; i++) kernel[i] = 1;
+    if (!params) return;
+    *params = g_params;
+}
 
-    nOrgX = static_cast<int>(nKernelSizeX / 2.0 - 0.5);
-    nOrgY = static_cast<int>(nKernelSizeY / 2.0 - 0.5);
+// ============================================================
+// 공용 헬퍼: 팽창(모폴로지) — 기존 파일에 있던 것과 동일한 3x3 팽창.
+// ============================================================
+static int Dilate_BinaryMini(const unsigned char* fmSour, unsigned char* fmDest, int nWidth, int nHeight)
+{
+    int nKernelSizeY = 3, nKernelSizeX = 3;
+    int nOrgX = static_cast<int>(nKernelSizeX / 2.0 - 0.5);
+    int nOrgY = static_cast<int>(nKernelSizeY / 2.0 - 0.5);
+
+    std::memset(fmDest, 0, static_cast<size_t>(nWidth) * nHeight);
 
     for (int i = 0; i < nHeight - nKernelSizeY; i++) {
         for (int j = 0; j < nWidth - nKernelSizeX; j++) {
-            for (int k = 0; k < nKernelSizeY; k++) {
-                for (int l = 0; l < nKernelSizeX; l++) {
-                    if (*(fmSour + (i + k) * nWidth + j + l)) {
-                        *(fmDest + (i + nOrgY) * nWidth + j + nOrgX) = 255;
-                        goto LOOP;
-                    }
-                    *(fmDest + (i + nOrgY) * nWidth + j + nOrgX) = 0;
+            bool found = false;
+            for (int k = 0; k < nKernelSizeY && !found; k++) {
+                for (int l = 0; l < nKernelSizeX && !found; l++) {
+                    if (fmSour[(i + k) * nWidth + j + l]) found = true;
                 }
             }
-        LOOP: continue;
+            fmDest[(i + nOrgY) * nWidth + j + nOrgX] = found ? 255 : 0;
         }
     }
-
     return 1;
 }
 
 // ============================================================
-// 런타임 파라미터 설정/조회
+// 실제 로직(SetDefectInfo) 그대로 포팅: 프로젝션 기반 이진화.
+// elecIdx는 SURF_INSUL / SURF_NULL / (그 외=코팅부) 값을 그대로 받는다.
 // ============================================================
-extern "C" INSPECT_API void SetInspectParams(const InspectParams* params)
+static void BinarizeProj(cv::Mat src, cv::Mat dst, int nWidth, int nHeight,
+    int thUp, int thDn, int thNull, int* nProjY, int* nProjX, bool isWhiteDefect, int elecIdx)
 {
-    if (!params) return;
-    g_D_FORM_MIN_AREA_RATIO = params->D_FORM_MIN_AREA_RATIO;
-    g_D_ROUNDNESS = params->D_ROUNDNESS;
-    g_D_DARK_AREA_PERCENT = params->D_DARK_AREA_PERCENT;
-    g_D_LINEAR_BASE_BRIGHT = params->D_LINEAR_BASE_BRIGHT;
-    g_D_LINE_ANGLE_LOW = params->D_LINE_ANGLE_LOW;
-    g_D_LINE_ANGLE_HIGH = params->D_LINE_ANGLE_HIGH;
+    static const int DEFECT_LINE_VALUE = 250;
+    static const int DEFECT_INSU_LINE_VALUE = 150;
 
-    g_D_WHITE_PEAK_IF = params->D_WHITE_PEAK_IF;
-    g_D_WHITE_PEAK_ELSEIF = params->D_WHITE_PEAK_ELSEIF;
-    g_D_WHITE_RATIO = params->D_WHITE_RATIO;
-    g_D_WHITE_LINE_PEAK = params->D_WHITE_LINE_PEAK;
+    int nTh = 0;
+    int nTmp = 0;
 
-    g_D_LINEARITY_RATIO = params->D_LINEARITY_RATIO;
-    g_AREA_MIN = params->AREA_MIN;
-    g_NDIL_CNT = params->NDIL_CNT;
-}
-
-extern "C" INSPECT_API void GetInspectParams(InspectParams* params)
-{
-    if (!params) return;
-    params->D_FORM_MIN_AREA_RATIO = g_D_FORM_MIN_AREA_RATIO;
-    params->D_ROUNDNESS = g_D_ROUNDNESS;
-    params->D_DARK_AREA_PERCENT = g_D_DARK_AREA_PERCENT;
-    params->D_LINEAR_BASE_BRIGHT = g_D_LINEAR_BASE_BRIGHT;
-    params->D_LINE_ANGLE_LOW = g_D_LINE_ANGLE_LOW;
-    params->D_LINE_ANGLE_HIGH = g_D_LINE_ANGLE_HIGH;
-
-    params->D_WHITE_PEAK_IF = g_D_WHITE_PEAK_IF;
-    params->D_WHITE_PEAK_ELSEIF = g_D_WHITE_PEAK_ELSEIF;
-    params->D_WHITE_RATIO = g_D_WHITE_RATIO;
-    params->D_WHITE_LINE_PEAK = g_D_WHITE_LINE_PEAK;
-
-    params->D_LINEARITY_RATIO = g_D_LINEARITY_RATIO;
-    params->AREA_MIN = g_AREA_MIN;
-    params->NDIL_CNT = g_NDIL_CNT;
-}
-
-// ============================================================
-// 로직트리 기반 최종 불량 타입 판정 (기존 코드에서 기본 상수 대신 전역변수 사용)
-// ============================================================
-static int ClassifyDefectType(const BlobFeature& f, bool bIsLinear)
-{
-    int nResultType = DEFECT_UNKNOWN;
-
-    if (f.isDark)
+    if (isWhiteDefect)
     {
-        if (!bIsLinear)
+        for (int xIndex = 0; xIndex < nWidth; xIndex++)
         {
-            if (f.areaRatio > g_D_FORM_MIN_AREA_RATIO)
+            nTh = nProjY[xIndex] + thUp;
+            for (int yIndex = 0; yIndex < nHeight; yIndex++)
             {
-                if (f.circularity > g_D_ROUNDNESS)
+                if (elecIdx == SURF_INSUL)
                 {
-                    if (f.areaObjPercent > g_D_DARK_AREA_PERCENT)
+                    if (nTh > DEFECT_INSU_LINE_VALUE)
                     {
-                        nResultType = DEFECT_CRATER;
+                        int nThLine = nProjX[xIndex] + thUp;
+                        nTmp = *src.ptr(yIndex, xIndex);
+                        *dst.ptr(yIndex, xIndex) = (nTmp > nThLine) ? 255 : 0;
                     }
                     else
                     {
-                        nResultType = DEFECT_CRACK;
+                        nTmp = *src.ptr(yIndex, xIndex);
+                        *dst.ptr(yIndex, xIndex) = (nTmp > nTh) ? 255 : 0;
                     }
                 }
-                else
+                else if (nTh > DEFECT_LINE_VALUE)
                 {
-                    nResultType = DEFECT_CRACK;
-                }
-            }
-            else
-            {
-                nResultType = DEFECT_WEAK_POINT_D;
-            }
-        }
-        else
-        {
-            if (f.peakMax > g_D_LINEAR_BASE_BRIGHT)
-            {
-                if (f.angleDeg < g_D_LINE_ANGLE_LOW || f.angleDeg > g_D_LINE_ANGLE_HIGH)
-                {
-                    nResultType = DEFECT_SCRATCH;
+                    int nThLine = nProjX[xIndex] + thUp;
+                    nTmp = *src.ptr(yIndex, xIndex);
+                    *dst.ptr(yIndex, xIndex) = (nTmp > nThLine) ? 255 : 0;
                 }
                 else
                 {
-                    nResultType = DEFECT_CRACK;
+                    nTmp = *src.ptr(yIndex, xIndex);
+                    *dst.ptr(yIndex, xIndex) = (nTmp > nTh) ? 255 : 0;
                 }
-            }
-            else
-            {
-                nResultType = DEFECT_BLACK_WEAK;
             }
         }
     }
     else
     {
-        if (!bIsLinear)
+        if (elecIdx == SURF_NULL)
         {
-            if (f.peakMax > g_D_WHITE_PEAK_IF)
+            for (int xIndex = 0; xIndex < nWidth; xIndex++)
             {
-                nResultType = DEFECT_PINHOLE;
-            }
-            else if (f.peakMax > g_D_WHITE_PEAK_ELSEIF)
-            {
-                if (f.ratioMopol > g_D_WHITE_RATIO)
+                const int nDarkNullAve = 60;
+                nTh = nProjY[xIndex] - thNull;
+                if (nTh < nDarkNullAve)
                 {
-                    nResultType = DEFECT_MICRO_SCRATCH;
+                    for (int yIndex = 0; yIndex < nHeight; yIndex++)
+                    {
+                        int nThCol = nProjX[xIndex] - thNull;
+                        nTmp = *src.ptr(yIndex, xIndex);
+                        *dst.ptr(yIndex, xIndex) = (nTmp < nThCol) ? 255 : 0;
+                    }
                 }
                 else
                 {
-                    nResultType = DEFECT_DENT;
+                    for (int yIndex = 0; yIndex < nHeight; yIndex++)
+                    {
+                        nTmp = *src.ptr(yIndex, xIndex);
+                        *dst.ptr(yIndex, xIndex) = (nTmp < nTh) ? 255 : 0;
+                    }
                 }
-            }
-            else
-            {
-                nResultType = DEFECT_WHITE_WEAK;
             }
         }
         else
         {
-            if (f.peakMax < g_D_WHITE_LINE_PEAK)
+            for (int xIndex = 0; xIndex < nWidth; xIndex++)
             {
-                nResultType = DEFECT_LINE;
-            }
-            else
-            {
-                nResultType = DEFECT_MICRO_SCRATCH;
+                const int nDarkAve = 60;
+                nTh = nProjY[xIndex] - thDn;
+                if (nTh < nDarkAve)
+                {
+                    for (int yIndex = 0; yIndex < nHeight; yIndex++)
+                    {
+                        int nThCol = nProjX[xIndex] - thDn;
+                        nTmp = *src.ptr(yIndex, xIndex);
+                        *dst.ptr(yIndex, xIndex) = (nTmp < nThCol) ? 255 : 0;
+                    }
+                }
+                else
+                {
+                    for (int yIndex = 0; yIndex < nHeight; yIndex++)
+                    {
+                        nTmp = *src.ptr(yIndex, xIndex);
+                        *dst.ptr(yIndex, xIndex) = (nTmp < nTh) ? 255 : 0;
+                    }
+                }
             }
         }
     }
+}
 
-    return nResultType;
+// 실제 로직 그대로 포팅: ROI 내 이진 영상에서 객체(255) 픽셀 비율(0~1)을 구한다.
+struct RectI { int left, top, right, bottom; };
+
+static double GetObjectArea(const unsigned char* fmBi, int nWidth, int /*nHeight*/, RectI rtIns)
+{
+    int nCnt_BG = 0, nCnt_OBJ = 0;
+    for (int y = rtIns.top; y < rtIns.bottom; y++)
+    {
+        for (int x = rtIns.left; x < rtIns.right - 1; x++)
+        {
+            int nVal = fmBi[y * nWidth + x];
+            if (nVal == 0) nCnt_BG++;
+            else if (nVal == 255) nCnt_OBJ++;
+        }
+    }
+    double dSum = static_cast<double>(nCnt_OBJ + nCnt_BG);
+    return (dSum != 0) ? (nCnt_OBJ / dSum) : 0.0;
+}
+
+// 실제 로직 그대로 포팅: 3x3 가우시안 커널 생성.
+static void generateGaussKernel(double* dKernel, int diameter)
+{
+    double sigma = diameter / 4.0;
+    int mean = diameter / 2;
+    double sum = 0.0;
+
+    for (int x = 0; x < diameter; ++x) {
+        for (int y = 0; y < diameter; ++y) {
+            dKernel[y * diameter + x] = std::exp(-0.5 * (std::pow((x - mean) / sigma, 2.0) + std::pow((y - mean) / sigma, 2.0))) / (2 * PI * sigma * sigma);
+            sum += dKernel[y * diameter + x];
+        }
+    }
+    for (int i = 0; i < diameter * diameter; ++i) dKernel[i] /= sum;
+}
+
+// 실제 로직 그대로 포팅: 가우시안(가중합) 필터.
+static int GaussianBlur(cv::Mat src, cv::Mat dst, int nWidth, int nHeight,
+    double* pKernel, int nKernelSizeX, int nKernelSizeY)
+{
+    int nOrgX = static_cast<int>(nKernelSizeX / 2.0 - 0.5);
+    int nOrgY = static_cast<int>(nKernelSizeY / 2.0 - 0.5);
+
+    for (int y = 0; y < nHeight; y++)
+        for (int x = 0; x < nWidth; x++)
+            *dst.ptr(y, x) = *src.ptr(y, x); // 가장자리 등 미처리 영역은 원본 유지
+
+    for (int i = nOrgY; i < nHeight - nKernelSizeY; i++)
+    {
+        for (int j = nOrgX; j < nWidth - nKernelSizeX; j++)
+        {
+            double sum = 0;
+            for (int k = 0; k < nKernelSizeY; k++)
+                for (int l = 0; l < nKernelSizeX; l++)
+                    sum += (*src.ptr(i + k, j + l)) * pKernel[nKernelSizeX * k + l];
+
+            if (sum > 255) sum = 255;
+            *dst.ptr(i + nOrgY, j + nOrgX) = static_cast<unsigned char>(sum);
+        }
+    }
+    return 1;
 }
 
 // ============================================================
-// InspectImage : CChain 기반 blob 검사 진입점 (AREA_MIN, NDIL_CNT 등 전역변수 사용)
+// 실제 로직(ClassifyDefectType) 그대로 포팅.
 // ============================================================
+struct RealFeature
+{
+    bool isWhite;
+    double ratio;         // 장축/단축 (항상 1 이상)
+    double sizeX, sizeY;  // 실측 크기
+    double compactness;
+    double angleDeg;
+    double peakValue;
+    double area;
+    double areaRatioWithinRoiPercent; // 0~100
+    double mopologyRatio;
+};
+
+static int ClassifyReal(int surfaceType, bool isInsulGap, const RealFeature& f, const RealTreeParams& p)
+{
+    if (surfaceType == SURF_INSUL)
+    {
+        if (f.isWhite)
+        {
+            if (isInsulGap)
+                return (f.ratio > p.Ratio_W) ? RDC_INSUL_GAP_LINE : RDC_INSUL_GAP_SPOT;
+            else
+                return (f.ratio > p.Ratio_W) ? RDC_INSUL_LINE : RDC_INSUL_PINHOLE;
+        }
+        return RDC_INSUL_ISLAND;
+    }
+
+    if (surfaceType == SURF_NULL)
+    {
+        // 흑불량만 존재. Ratio_B 초과면 주름, 그 외엔 Compactness_B와 무관하게 아일랜드(원본과 동일).
+        if (f.ratio > p.Ratio_B) return RDC_NONE_COATING_WRINKLE;
+        return RDC_ISLAND;
+    }
+
+    // 코팅부
+    if (f.isWhite)
+    {
+        bool linear = (f.ratio > p.Ratio_W) && (f.sizeY > p.SizeY_W);
+        if (linear)
+            return (f.peakValue >= p.ThWhiteLine) ? RDC_LINE : RDC_SCRATCH_TINY;
+
+        if (f.peakValue > p.ThPinhole) return RDC_PINHOLE;
+        if (f.peakValue > p.ThExtrude)
+            return (f.mopologyRatio < p.Ratio_W) ? RDC_PROTRUSION : RDC_SCRATCH_TINY;
+        return RDC_WEAK_POINT_W;
+    }
+    else
+    {
+        bool linear = (f.ratio > p.Ratio_B) && (f.sizeY > p.SizeY_B);
+        if (linear)
+        {
+            if (f.peakValue > p.ThDarkDefectMin)
+                return (f.angleDeg <= p.AngleLow || f.angleDeg >= p.AngleHigh) ? RDC_SCRATCH : RDC_CRACK;
+            return RDC_WEAK_POINT_D;
+        }
+
+        // 원본 코드 그대로: Area<=BlackMinArea면 CRATER의 UseJudge로 게이트된 WEAK_POINT_D.
+        if (f.area <= p.BlackMinArea) return RDC_WEAK_POINT_D;
+        // Compactness/AreaRatio% 미달로 결과 미지정이던 경로는 CRACK으로 처리(사용자 요청 반영).
+        if (f.compactness <= p.CompactnessB) return RDC_CRACK;
+        return (f.areaRatioWithinRoiPercent > p.PercentB) ? RDC_CRATER : RDC_CRACK;
+    }
+}
+
+// ============================================================
+// SetDefectInfo 그대로 포팅: 후보 하나(bbox + 이미 알고 있는 극성)를 다시 크롭해서
+// 전처리 → (가우시안) → 프로젝션 → 이진화 → Chain 분석까지 다시 수행해 실측 특징값을 구한다.
+// 실제 운영 코드는 후보의 극성(백/흑)을 이 단계에서 다시 비교해 정하지만, 이 뷰어의 1단계
+// 후보 검출이 이미 극성별로 분리되어 있으므로 그 결과를 그대로 신뢰한다.
+// ============================================================
+static bool AnalyzeDefectFeatures(
+    const unsigned char* fullGray, int fullW, int fullH,
+    int candX, int candY, int candW, int candH, bool isWhiteCandidate,
+    int surfaceType, bool isInsulGap, const RealTreeParams& params,
+    DefectResult& out)
+{
+    int cx1 = std::max(0, candX - kCropMargin);
+    int cy1 = std::max(0, candY - kCropMargin);
+    int cx2 = std::min(fullW, candX + candW + kCropMargin);
+    int cy2 = std::min(fullH, candY + candH + kCropMargin);
+    int cropWidth = cx2 - cx1;
+    int cropHeight = cy2 - cy1;
+    if (cropWidth < 4 || cropHeight < 4) return false;
+
+    cv::Mat ngCropImage(cropHeight, cropWidth, CV_8UC1);
+    for (int y = 0; y < cropHeight; y++)
+        std::memcpy(ngCropImage.ptr(y, 0), fullGray + (cy1 + y) * fullW + cx1, cropWidth);
+
+    cv::Mat preprocessImage = ngCropImage.clone();
+
+    // electrodeMean: [20,200) 범위 픽셀의 평균
+    long acc = 0; unsigned int count = 0;
+    for (int y = 0; y < cropHeight; y++)
+        for (int x = 0; x < cropWidth; x++)
+        {
+            int v = *preprocessImage.ptr(y, x);
+            if (v >= 20 && v < 200) { acc += v; count++; }
+        }
+    double electrodeMean = (count > 0) ? (static_cast<double>(acc) / count) : 128.0;
+
+    // 표면 종류별 전처리
+    if (surfaceType == SURF_INSUL)
+    {
+        for (int y = 0; y < cropHeight; y++)
+            for (int x = 0; x < cropWidth; x++)
+            {
+                int v = *preprocessImage.ptr(y, x);
+                if (isWhiteCandidate && electrodeMean > v)
+                    *preprocessImage.ptr(y, x) = static_cast<unsigned char>(electrodeMean);
+                else if (!isWhiteCandidate && electrodeMean < v)
+                    *preprocessImage.ptr(y, x) = static_cast<unsigned char>(electrodeMean);
+            }
+    }
+    else if (surfaceType == SURF_NULL)
+    {
+        // 원본 이미지 그대로 사용
+    }
+    else
+    {
+        for (int y = 0; y < cropHeight; y++)
+            for (int x = 0; x < cropWidth; x++)
+            {
+                int v = *preprocessImage.ptr(y, x);
+                int diff = static_cast<int>(electrodeMean) - v;
+                int nTmp = (diff < 0)
+                    ? params.TargetBright + (std::abs(diff) * params.Weight_W)
+                    : params.TargetBright - (std::abs(diff) * params.Weight_B);
+                nTmp = std::clamp(nTmp, 0, 255);
+                *preprocessImage.ptr(y, x) = static_cast<unsigned char>(nTmp);
+            }
+    }
+
+    cv::Mat inspectImage;
+    if (params.UseGaussian)
+    {
+        double kernel[9];
+        generateGaussKernel(kernel, 3);
+        inspectImage = preprocessImage.clone();
+        GaussianBlur(preprocessImage, inspectImage, cropWidth, cropHeight, kernel, 3, 3);
+    }
+    else
+    {
+        inspectImage = preprocessImage.clone();
+    }
+
+    std::vector<int> projX(cropWidth, 0), projY(cropHeight, 0);
+    for (int x = 0; x < cropWidth; x++)
+    {
+        for (int y = 0; y < cropHeight; y++) projX[x] += *inspectImage.ptr(y, x);
+        projX[x] /= cropWidth;
+    }
+    for (int y = 0; y < cropHeight; y++)
+    {
+        for (int x = 0; x < cropWidth; x++) projY[y] += *inspectImage.ptr(y, x);
+        projY[y] /= cropHeight;
+    }
+
+    int nThW = (surfaceType == SURF_INSUL) ? params.InsulBinaryW : params.BinaryW;
+    int nThB = (surfaceType == SURF_INSUL) ? params.InsulBinaryB : params.BinaryB;
+
+    cv::Mat whiteBinaryImage = cv::Mat::zeros(cropHeight, cropWidth, CV_8UC1);
+    cv::Mat darkBinaryImage = cv::Mat::zeros(cropHeight, cropWidth, CV_8UC1);
+    BinarizeProj(inspectImage, whiteBinaryImage, cropWidth, cropHeight, nThW, nThB, params.BinaryNull, projY.data(), projX.data(), true, surfaceType);
+    BinarizeProj(inspectImage, darkBinaryImage, cropWidth, cropHeight, nThW, nThB, params.BinaryNull, projY.data(), projX.data(), false, surfaceType);
+
+    // 모폴로지(팽창) — 원본과 동일하게 항상 whiteBinaryImage 기준으로 계산한다.
+    cv::Mat mopologyImage = cv::Mat::zeros(cropHeight, cropWidth, CV_8UC1);
+    {
+        cv::Mat src = whiteBinaryImage.clone();
+        cv::Mat dst = mopologyImage.clone();
+        for (int i = 0; i < kMopologyDilateCount; i++)
+        {
+            Dilate_BinaryMini(src.data, dst.data, cropWidth, cropHeight);
+            src = dst.clone();
+        }
+        mopologyImage = dst;
+    }
+
+    CChain chainMopol(80, 100000);
+    chainMopol.SetChainData(1, mopologyImage.data, 1, 1, 2, 100000, cropWidth, cropHeight);
+    int blobCntMopol = chainMopol.FastChain(1, 1, cropWidth - 1, cropHeight - 1);
+
+    double mopologyRatio = 0.0;
+    if (blobCntMopol > 0)
+    {
+        double maxArea = 0.0; int maxIdx = 0;
+        for (int i = 0; i < blobCntMopol; i++)
+        {
+            double a = chainMopol.Chain_Area(i);
+            if (a > maxArea) { maxArea = a; maxIdx = i; }
+        }
+        int mx1 = chainMopol.FindMinX(maxIdx), mx2 = chainMopol.FindMaxX(maxIdx);
+        int my1 = chainMopol.FindMinY(maxIdx), my2 = chainMopol.FindMaxY(maxIdx);
+        double mDefectX = (mx2 - mx1) * params.ScaleX;
+        double mDefectY = (my2 - my1) * params.ScaleY;
+        if (mDefectX != 0) mopologyRatio = mDefectY / mDefectX;
+    }
+
+    // 후보의 알려진 극성에 해당하는 이진 영상에서 Chain 분석
+    cv::Mat& chosenBinary = isWhiteCandidate ? whiteBinaryImage : darkBinaryImage;
+    CChain chain(80, 100000);
+    chain.SetChainData(1, chosenBinary.data, 1, 1, 2, 100000, cropWidth, cropHeight);
+    int blobCnt = chain.FastChain(1, 1, cropWidth - 1, cropHeight - 1);
+    if (blobCnt <= 0) return false;
+
+    double maxArea = 0.0; int maxIdx = 0;
+    for (int i = 0; i < blobCnt; i++)
+    {
+        double a = chain.Chain_Area(i);
+        if (a > maxArea) { maxArea = a; maxIdx = i; }
+    }
+
+    int nx1 = chain.FindMinX(maxIdx), nx2 = chain.FindMaxX(maxIdx);
+    int ny1 = chain.FindMinY(maxIdx), ny2 = chain.FindMaxY(maxIdx);
+
+    double compactness = chain.FindCompactness(maxIdx);
+    double angleDeg = std::abs(chain.FindAngle(maxIdx));
+
+    double sizeX = (nx2 - nx1) * params.ScaleX;
+    double sizeY = (ny2 - ny1) * params.ScaleY;
+    double ratio = 1.0;
+    if (sizeX != 0 && sizeY != 0)
+        ratio = (sizeY / sizeX <= sizeX / sizeY) ? (sizeX / sizeY) : (sizeY / sizeX);
+
+    double centerX = 0, centerY = 0;
+    chain.Chain_Center(maxIdx, &centerX, &centerY);
+    double lenLong = 0, lenShort = 0, lenAvg = 0;
+    chain.FineDistFromPoint(maxIdx, centerX, centerY, &lenLong, &lenShort, &lenAvg);
+
+    // 대각선 보정 (30~60도 사이일 때 실측 길이 재계산)
+    if (angleDeg >= 30 && angleDeg <= 60)
+    {
+        double maxPixel = lenLong * 2, minPixel = lenShort * 2;
+        double realMax = std::sqrt(std::pow(maxPixel * std::cos(angleDeg * PI / 180) * params.ScaleX, 2) + std::pow(maxPixel * std::sin(angleDeg * PI / 180) * params.ScaleY, 2));
+        double realMin = std::sqrt(std::pow(minPixel * std::cos((90 - angleDeg) * PI / 180) * params.ScaleX, 2) + std::pow(minPixel * std::sin((90 - angleDeg) * PI / 180) * params.ScaleY, 2));
+        if (realMin != 0)
+        {
+            sizeX = realMin;
+            sizeY = realMax;
+            ratio = realMax / realMin;
+        }
+    }
+
+    // 피크치: bbox ±4 픽셀 범위에서 electrodeMean 대비 최대 편차(원본 crop 기준)
+    int sx1 = std::max(0, nx1 - kPeakSubRange), sx2 = std::min(cropWidth, nx2 + kPeakSubRange);
+    int sy1 = std::max(0, ny1 - kPeakSubRange), sy2 = std::min(cropHeight, ny2 + kPeakSubRange);
+    int maxTemp = 0, minTemp = 255;
+    for (int y = sy1; y < sy2; y++)
+        for (int x = sx1; x < sx2; x++)
+        {
+            int diff = static_cast<int>(*ngCropImage.ptr(y, x)) - static_cast<int>(electrodeMean);
+            if (diff > maxTemp) maxTemp = diff;
+            if (diff < minTemp) minTemp = diff;
+        }
+    if (minTemp == 255) minTemp = 0;
+    double peakValue = isWhiteCandidate ? std::abs(maxTemp) : std::abs(minTemp);
+
+    RectI roi{ nx1, ny1, nx2, ny2 };
+    double areaObj = GetObjectArea(chosenBinary.data, cropWidth, cropHeight, roi);
+    double areaRatioWithinRoiPercent = (areaObj > 0) ? (areaObj * 100.0) : 9999.0;
+
+    RealFeature f{};
+    f.isWhite = isWhiteCandidate;
+    f.ratio = ratio;
+    f.sizeX = sizeX;
+    f.sizeY = sizeY;
+    f.compactness = compactness;
+    f.angleDeg = angleDeg;
+    f.peakValue = peakValue;
+    f.area = maxArea;
+    f.areaRatioWithinRoiPercent = areaRatioWithinRoiPercent;
+    f.mopologyRatio = mopologyRatio;
+
+    int code = ClassifyReal(surfaceType, isInsulGap, f, params);
+
+    out.x = cx1 + nx1;
+    out.y = cy1 + ny1;
+    out.width = std::max(1, nx2 - nx1);
+    out.height = std::max(1, ny2 - ny1);
+    out.area = maxArea;
+    out.mean = electrodeMean;
+    out.aspectRatio = (out.height > 0) ? static_cast<double>(out.width) / out.height : 0.0;
+    out.defectType = code;
+    out.isDark = isWhiteCandidate ? 0 : 1;
+    out.isLinear = (surfaceType == SURF_COATING)
+        ? (isWhiteCandidate ? (ratio > params.Ratio_W && sizeY > params.SizeY_W) : (ratio > params.Ratio_B && sizeY > params.SizeY_B))
+        : false;
+
+    out.areaRatio = 0.0; // 사용 안 함(구 로직 잔재) — 참고용으로 0 유지
+    out.circularity = compactness;
+    out.angleDeg = angleDeg;
+    out.peakMax = peakValue;
+    out.areaObjPercent = areaRatioWithinRoiPercent / 100.0; // C# 쪽은 0~1 비율을 기대함
+    out.ratioMopol = mopologyRatio;
+
+    out.ratio = ratio;
+    out.sizeX = sizeX;
+    out.sizeY = sizeY;
+
+    return true;
+}
+
+// ============================================================
+// 후보 검출(1단계, 기존 방식 유지) — 전역 평균±threshold로 다크/화이트 블롭을 찾는다.
+// ============================================================
+struct Candidate { int x, y, w, h; double area; bool isWhite; };
+
 extern "C" INSPECT_API int InspectImage(
     const unsigned char* bgr32, int width, int height, int stride, int threshold,
+    int surfaceType, int isInsulGap,
     DefectResult* results, int maxResults)
 {
     if (!bgr32 || !results || width <= 0 || height <= 0 || maxResults <= 0) return 0;
@@ -283,162 +596,48 @@ extern "C" INSPECT_API int InspectImage(
         pBinWhite[i] = (pGray[i] > whiteCut) ? 255 : 0;
     }
 
-    std::unique_ptr<CChain> pChain_B(new CChain(g_AREA_MIN, 100000));
-    pChain_B->SetChainData(1, pBinDark.get(), 1, 1, 2, 100000, width, height);
-    int nBlobCnt_B = pChain_B->FastChain(1, 1, width - 1, height - 1);
+    CChain chainB(kCandidateAreaMin, 100000);
+    chainB.SetChainData(1, pBinDark.get(), 1, 1, 2, 100000, width, height);
+    int blobCntB = chainB.FastChain(1, 1, width - 1, height - 1);
 
-    std::unique_ptr<CChain> pChain_W(new CChain(g_AREA_MIN, 100000));
-    pChain_W->SetChainData(1, pBinWhite.get(), 1, 1, 2, 100000, width, height);
-    int nBlobCnt_W = pChain_W->FastChain(1, 1, width - 1, height - 1);
+    CChain chainW(kCandidateAreaMin, 100000);
+    chainW.SetChainData(1, pBinWhite.get(), 1, 1, 2, 100000, width, height);
+    int blobCntW = chainW.FastChain(1, 1, width - 1, height - 1);
 
-    std::unique_ptr<unsigned char[]> pOriBinary(new unsigned char[width * height]);
-    std::unique_ptr<unsigned char[]> pMopol(new unsigned char[width * height]);
-    memcpy(pOriBinary.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
-    memcpy(pMopol.get(), pBinWhite.get(), sizeof(unsigned char) * width * height);
-
-    for (int i = 0; i < g_NDIL_CNT; ++i)
+    std::vector<Candidate> candidates;
+    for (int i = 0; i < blobCntB; ++i)
     {
-        Dilate_BinaryMini(pOriBinary.get(), pMopol.get(), width, height, width);
+        double a = chainB.Chain_Area(i);
+        if (a < kCandidateAreaMin) continue;
+        int x1 = chainB.FindMinX(i), x2 = chainB.FindMaxX(i);
+        int y1 = chainB.FindMinY(i), y2 = chainB.FindMaxY(i);
+        candidates.push_back({ x1, y1, std::max(1, x2 - x1), std::max(1, y2 - y1), a, false });
+    }
+    for (int i = 0; i < blobCntW; ++i)
+    {
+        double a = chainW.Chain_Area(i);
+        if (a < kCandidateAreaMin) continue;
+        int x1 = chainW.FindMinX(i), x2 = chainW.FindMaxX(i);
+        int y1 = chainW.FindMinY(i), y2 = chainW.FindMaxY(i);
+        candidates.push_back({ x1, y1, std::max(1, x2 - x1), std::max(1, y2 - y1), a, true });
     }
 
-    std::unique_ptr<CChain> pChain_mopol(new CChain(40, 100000));
-    pChain_mopol->SetChainData(1, pMopol.get(), 1, 1, 2, 100000, width, height);
-    int nBlobCnt_mopol = pChain_mopol->FastChain(1, 1, width - 1, height - 1);
-
-    std::vector<BlobFeature> feats;
-
-    for (int i = 0; i < nBlobCnt_B && (int)feats.size() < maxResults; ++i)
-    {
-        double dArea = pChain_B->Chain_Area(i);
-        if (dArea < g_AREA_MIN) continue;
-
-        int nx1 = pChain_B->FindMinX(i);
-        int nx2 = pChain_B->FindMaxX(i);
-        int ny1 = pChain_B->FindMinY(i);
-        int ny2 = pChain_B->FindMaxY(i);
-
-        double dW = std::max<double>(1.0, nx2 - nx1);
-        double dH = std::max<double>(1.0, ny2 - ny1);
-
-        BlobFeature f{};
-        f.x = nx1; f.y = ny1; f.w = static_cast<int>(dW); f.h = static_cast<int>(dH);
-        f.area = dArea;
-        f.areaRatio = dArea / (dW * dH);
-        f.circularity = pChain_B->FindCompactness(i);
-        f.angleDeg = std::abs(pChain_B->FindAngle(i));
-
-        double dMinTemp = 255.0, dMaxTemp = 0.0;
-        for (int yy = ny1; yy <= ny2 && yy < height; ++yy)
-        {
-            for (int xx = nx1; xx <= nx2 && xx < width; ++xx)
-            {
-                double diff = std::abs(static_cast<double>(pGray[yy * width + xx]) - meanGlobal);
-                dMinTemp = std::min<double>(dMinTemp, diff);
-                dMaxTemp = std::max<double>(dMaxTemp, diff);
-            }
-        }
-        f.peakMin = dMinTemp;
-        f.peakMax = dMaxTemp;
-
-        f.areaObjPercent = dArea / (static_cast<double>(width) * static_cast<double>(height));
-        f.ratioMopol = 0.0;
-        f.ratio = dH / dW;
-        f.isDark = true;
-
-        feats.push_back(f);
-    }
-
-    for (int i = 0; i < nBlobCnt_W && (int)feats.size() < maxResults; ++i)
-    {
-        double dArea = pChain_W->Chain_Area(i);
-        if (dArea < g_AREA_MIN) continue;
-
-        int nx1 = pChain_W->FindMinX(i);
-        int nx2 = pChain_W->FindMaxX(i);
-        int ny1 = pChain_W->FindMinY(i);
-        int ny2 = pChain_W->FindMaxY(i);
-
-        double dW = std::max<double>(1.0, nx2 - nx1);
-        double dH = std::max<double>(1.0, ny2 - ny1);
-
-        BlobFeature f{};
-        f.x = nx1; f.y = ny1; f.w = static_cast<int>(dW); f.h = static_cast<int>(dH);
-        f.area = dArea;
-        f.areaRatio = dArea / (dW * dH);
-        f.circularity = pChain_W->FindCompactness(i);
-        f.angleDeg = std::abs(pChain_W->FindAngle(i));
-
-        double dMinTemp = 255.0, dMaxTemp = 0.0;
-        for (int yy = ny1; yy <= ny2 && yy < height; ++yy)
-        {
-            for (int xx = nx1; xx <= nx2 && xx < width; ++xx)
-            {
-                double diff = std::abs(static_cast<double>(pGray[yy * width + xx]) - meanGlobal);
-                dMinTemp = std::min<double>(dMinTemp, diff);
-                dMaxTemp = std::max<double>(dMaxTemp, diff);
-            }
-        }
-        f.peakMin = dMinTemp;
-        f.peakMax = dMaxTemp;
-
-        f.areaObjPercent = dArea / (static_cast<double>(width) * static_cast<double>(height));
-
-        double dSizeMaxMopol = 0.0;
-        int    nManIdxMopol = 0;
-        for (int m = 0; m < nBlobCnt_mopol; ++m)
-        {
-            double s = pChain_mopol->Chain_Area(m);
-            if (dSizeMaxMopol < s) { dSizeMaxMopol = s; nManIdxMopol = m; }
-        }
-        if (nBlobCnt_mopol > 0)
-        {
-            int mx1 = pChain_mopol->FindMinX(nManIdxMopol);
-            int mx2 = pChain_mopol->FindMaxX(nManIdxMopol);
-            int my1 = pChain_mopol->FindMinY(nManIdxMopol);
-            int my2 = pChain_mopol->FindMaxY(nManIdxMopol);
-            double mW = std::max<double>(1.0, mx2 - mx1);
-            double mH = std::max<double>(1.0, my2 - my1);
-            f.ratioMopol = mH / mW;
-        }
-        else
-        {
-            f.ratioMopol = 0.0;
-        }
-
-        f.ratio = dH / dW;
-        f.isDark = false;
-
-        feats.push_back(f);
-    }
-
-    std::sort(feats.begin(), feats.end(), [](const BlobFeature& a, const BlobFeature& b) {
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
         return a.area > b.area;
         });
 
-    int count = std::min<int>(maxResults, static_cast<int>(feats.size()));
-    for (int i = 0; i < count; ++i)
+    RealTreeParams params = g_params;
+
+    int count = 0;
+    for (size_t i = 0; i < candidates.size() && count < maxResults; ++i)
     {
-        const BlobFeature& f = feats[i];
-        bool bIsLinear = IsLinearBlob(f);
-        int  defectType = ClassifyDefectType(f, bIsLinear);
-
-        results[i].x = f.x;
-        results[i].y = f.y;
-        results[i].width = f.w;
-        results[i].height = f.h;
-        results[i].area = f.area;
-        results[i].mean = meanGlobal;
-        results[i].aspectRatio = (f.h > 0) ? static_cast<double>(f.w) / f.h : 0.0;
-        results[i].defectType = defectType;
-        results[i].isDark = f.isDark ? 1 : 0;
-        results[i].isLinear = bIsLinear ? 1 : 0;
-
-        results[i].areaRatio = f.areaRatio;
-        results[i].circularity = f.circularity;
-        results[i].angleDeg = f.angleDeg;
-        results[i].peakMax = f.peakMax;
-        results[i].areaObjPercent = f.areaObjPercent;
-        results[i].ratioMopol = f.ratioMopol;
+        const Candidate& c = candidates[i];
+        DefectResult out{};
+        if (AnalyzeDefectFeatures(pGray.get(), width, height, c.x, c.y, c.w, c.h, c.isWhite,
+            surfaceType, isInsulGap != 0, params, out))
+        {
+            results[count++] = out;
+        }
     }
 
     return count;
