@@ -44,11 +44,11 @@ Release/
 *.recipe
 *.tlog
 
-# OpenCV binaries under third_party/opencv are tracked through Git LFS.
-!third_party/
-!third_party/opencv/
-!third_party/opencv/x64/
-!third_party/opencv/x64/**
+# OpenCV binaries under native/InspectionAlgorithm/third_party/opencv are tracked through Git LFS.
+!native/InspectionAlgorithm/third_party/
+!native/InspectionAlgorithm/third_party/opencv/
+!native/InspectionAlgorithm/third_party/opencv/x64/
+!native/InspectionAlgorithm/third_party/opencv/x64/**
 
 # Local sample data. Keep these outside git unless you intentionally add a tiny public sample set.
 image/
