@@ -210,14 +210,48 @@ public partial class MainWindow : Window
     {
         int selected = DefectList.SelectedIndex;
         DefectList.Items.Clear();
+        int realIndex = SelectRealDefectIndex();
         for (int i = 0; i < _results.Count; i++)
         {
             var r = _results[i];
             string code = ComputeRealDefectCode(r);
-            DefectList.Items.Add($"#{i + 1}  {RealDefectCatalog.DisplayName(code)} ({code})  ({r.X},{r.Y})  {r.Width} x {r.Height}");
+            string text = $"#{i + 1}  {RealDefectCatalog.DisplayName(code)} ({code})  ({r.X},{r.Y})  {r.Width} x {r.Height}";
+            DefectList.Items.Add(new DefectListEntry { Text = text, IsRealPick = (i == realIndex) });
         }
         if (selected >= 0 && selected < DefectList.Items.Count)
             DefectList.SelectedIndex = selected;
+    }
+
+    // 실제 운영 로직은 이미지 한 장당 최종 불량을 1개만 뽑는다: 절연부/코팅부는 "백불량 우선 → 그중
+    // 최대 면적", 무지부는 "흑불량만 대상 → 그중 최대 면적"(백불량은 애초에 대상이 아님).
+    // 뷰어는 학습/검증을 위해 1단계에서 찾은 후보를 전부 보여주지만, 이 규칙으로 "실제로는 이게
+    // 뽑혔을 것"인 한 개만 계산해 Defect List에서 하이라이트하는 데 쓴다. 후보가 없거나(무지부인데
+    // 흑불량이 하나도 없는 경우 등) 규칙에 맞는 후보가 없으면 -1(하이라이트 없음)을 반환한다.
+    private int SelectRealDefectIndex()
+    {
+        if (_results.Count == 0) return -1;
+
+        if (_surfaceType == SurfaceType.Null)
+        {
+            int bestDark = -1; double bestDarkArea = -1;
+            for (int i = 0; i < _results.Count; i++)
+            {
+                if (!_results[i].IsDark) continue;
+                if (_results[i].Area > bestDarkArea) { bestDarkArea = _results[i].Area; bestDark = i; }
+            }
+            return bestDark;
+        }
+
+        // Coating / Insul: 백불량 우선, 없으면 전체 중 최대 면적으로 대체.
+        int bestWhite = -1; double bestWhiteArea = -1;
+        int bestAny = -1; double bestAnyArea = -1;
+        for (int i = 0; i < _results.Count; i++)
+        {
+            var r = _results[i];
+            if (r.Area > bestAnyArea) { bestAnyArea = r.Area; bestAny = i; }
+            if (!r.IsDark && r.Area > bestWhiteArea) { bestWhiteArea = r.Area; bestWhite = i; }
+        }
+        return bestWhite >= 0 ? bestWhite : bestAny;
     }
 
     // ── 실제 판정 로직(ClassifyDefectType) 결과 코드 계산 ──────────────
@@ -1534,6 +1568,15 @@ public partial class MainWindow : Window
 // defectType은 이제 네이티브가 실제 로직(ClassifyDefectType)으로 직접 계산한 RealDefectCodeNative 값이지만,
 // Defect List/Feature 패널/Tree/Map은 여전히 ComputeRealDefectCode로 C# 쪽에서 다시 계산해 표시한다
 // (판정 근거를 단계별로 보여주기 위해 필요) — 두 계산은 같은 입력값(Ratio/SizeX/SizeY 등)을 쓰므로 항상 일치한다.
+// Defect List(ListBox)의 각 행: 표시 텍스트 + "실제 운영 로직이라면 이 후보를 최종 불량으로
+// 뽑았을 것"인지 여부. IsRealPick은 SelectRealDefectIndex()가 계산하며 XAML의 ItemTemplate이
+// 이 값으로 배경/배지를 다르게 그린다.
+public sealed class DefectListEntry
+{
+    public string Text { get; set; } = "";
+    public bool IsRealPick { get; set; }
+}
+
 public sealed class DefectResult
 {
     public int X, Y, Width, Height;
